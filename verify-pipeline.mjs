@@ -564,13 +564,14 @@ const PORTALS_FILE = process.env.CAREER_OPS_PORTALS || join(CAREER_OPS, 'portals
 if (!existsSync(PORTALS_FILE)) {
   ok('No portals.yml yet — nothing to coverage-check');
 } else {
+  let cfg;
   try {
     const { findUnclaimedEntries } = await import('./audit-portals.mjs');
     const { loadProviders } = await import('./providers/_registry.mjs');
     const { mergeProviderPlugins } = await import('./plugins/_engine.mjs');
     const yaml = await import('js-yaml');
 
-    const cfg = yaml.load(readFileSync(PORTALS_FILE, 'utf-8')) || {};
+    cfg = yaml.load(readFileSync(PORTALS_FILE, 'utf-8')) || {};
     // Both sections, because scan.mjs resolves both through the same registry:
     // an unclaimed aggregator board is exactly as dead as an unclaimed company.
     const entries = [
@@ -613,6 +614,30 @@ if (!existsSync(PORTALS_FILE)) {
     }
   } catch (err) {
     warn(`Portal coverage check could not run: ${err.message}`);
+  }
+
+  // --- Tracks sub-check (#track-unification, 2026-09-21) ---
+  // Check 15 above is already track-agnostic and company-shaped (reads the
+  // shared tracked_companies + job_boards lists), so the merge gives it the
+  // shared registry for free. The new value here: for each declared track,
+  // report its eligible-and-enabled company count, and warn on a
+  // scope: tagged track that resolves to 0 — the silent-dead-lane failure
+  // (every company tagged, but the tag name has a typo, or nothing got
+  // tagged at all).
+  try {
+    const { parseTracks, isEligible } = await import('./scan.mjs');
+    const tracks = parseTracks(cfg);
+    const companies = Array.isArray(cfg.tracked_companies) ? cfg.tracked_companies : [];
+    for (const track of tracks) {
+      const eligibleEnabled = companies.filter(c => c && c.enabled !== false && isEligible(track, c)).length;
+      if (track.scope === 'tagged' && eligibleEnabled === 0) {
+        warn(`portals.yml: track "${track.id}" (scope: tagged, tag: ${track.tag}) has 0 eligible enabled companies — the lane is dead`);
+      } else {
+        ok(`track ${track.id}: ${eligibleEnabled} eligible enabled companies`);
+      }
+    }
+  } catch (err) {
+    warn(`Track eligibility check could not run: ${err.message}`);
   }
 }
 
