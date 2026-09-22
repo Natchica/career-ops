@@ -1085,6 +1085,153 @@ function stripFormPair(rawA, rawB) {
   return [restA || rawA, restB || rawB];
 }
 
+/**
+ * Parses the `tracks` map from a loaded portals.yml config into an ordered
+ * array of track descriptors, each carrying its own compiled filters.
+ *
+ * This is the ONLY place track structure is interpreted (#track-unification,
+ * 2026-09-21). Every downstream consumer sees a plain array and never reads
+ * `config.tracks` directly or branches on a literal track id — that is what
+ * lets a future track be added as a pure YAML edit, with zero code changes.
+ *
+ * Backward compatibility: a portals.yml with NO top-level `tracks` key at all
+ * (the pre-track-unification shape — a fresh install from
+ * templates/portals.example.yml, or a fork that never migrated) synthesizes
+ * a single implicit track `a` (scope: all) from the flat title_filter /
+ * location_filter / salary_filter / content_filter keys, reproducing exactly
+ * the old single-track behavior. Only `tracks` present-but-EMPTY ({}) is
+ * treated as a real misconfiguration and throws — the key's presence signals
+ * intent to use it.
+ *
+ * @param {object} config - The parsed portals.yml config.
+ * @returns {Array<{id: string, scope: string, tag: string|null, titleFilter: Function, locationFilter: Function, salaryFilter: Function, contentFilter: Function}>}
+ */
+export function parseTracks(config) {
+  config = config && typeof config === 'object' ? config : {};
+  const tracks = config.tracks;
+  if (tracks === undefined) {
+    return [{
+      id: 'a',
+      scope: 'all',
+      tag: null,
+      rawLocationFilter: config.location_filter,
+      rawTitleFilter: config.title_filter,
+      titleFilter: buildTitleFilter(config.title_filter),
+      locationFilter: buildLocationFilter(config.location_filter),
+      salaryFilter: buildSalaryFilter(config.salary_filter),
+      contentFilter: buildContentFilter(config.content_filter),
+    }];
+  }
+  if (!tracks || typeof tracks !== 'object' || Object.keys(tracks).length === 0) {
+    throw new Error('portals.yml has a `tracks` key but it is empty — remove the key entirely to use the legacy flat schema, or add at least one track');
+  }
+  return Object.entries(tracks).map(([id, def]) => {
+    def = def && typeof def === 'object' ? def : {};
+    const scope = def.scope;
+    if (scope !== 'all' && scope !== 'tagged') {
+      throw new Error(`tracks.${id}.scope must be "all" or "tagged", got ${JSON.stringify(scope)}`);
+    }
+    const tag = def.tag;
+    if (scope === 'tagged' && (typeof tag !== 'string' || !tag.trim())) {
+      throw new Error(`tracks.${id} has scope: tagged but no non-empty string tag`);
+    }
+    return {
+      id,
+      scope,
+      tag: scope === 'tagged' ? tag : null,
+      rawLocationFilter: def.location_filter,
+      rawTitleFilter: def.title_filter,
+      titleFilter: buildTitleFilter(def.title_filter),
+      locationFilter: buildLocationFilter(def.location_filter),
+      salaryFilter: buildSalaryFilter(def.salary_filter),
+      contentFilter: buildContentFilter(def.content_filter),
+    };
+  });
+}
+
+/**
+ * Whether a tracked_companies entry is in scope for a given track.
+ *
+ * Strict on the tag check by design: a hand-edited `trackb_whitelisted:
+ * "true"` (string) or `1` must NOT silently widen a trust-vetted lane — only
+ * the literal boolean `true` counts.
+ *
+ * @param {{scope: string, tag: string|null}} track - A parsed track descriptor.
+ * @param {object} company - A tracked_companies entry.
+ * @returns {boolean}
+ */
+export function isEligible(track, company) {
+  if (track.scope === 'all') return true;
+  return company && company[track.tag] === true;
+}
+
+/**
+ * Merges the location_filter hints of every track eligible for a company
+ * into one hint object for the provider fetch ctx (#track-unification).
+ *
+ * Union on always_allow/allow, intersection on block/block_hard: hints are
+ * advisory (they steer which location facet a provider paginates on, never a
+ * hard drop — the real gate is each track's own compiled locationFilter
+ * predicate, applied later per-track). Union-then-intersect is the only
+ * combination that cannot make one track's geography unfetchable for
+ * another's benefit — over-widening costs a little extra pagination,
+ * under-widening costs postings outright.
+ *
+ * @param {Array<object>} tracks - parseTracks() output.
+ * @param {object} company - A tracked_companies entry.
+ * @returns {object} A location_filter-shaped hint object.
+ */
+/**
+ * Whether a single track admits a given posting at a given company: eligible
+ * (per isEligible) AND clears that track's own title/location/salary/content
+ * chain. Pure — no side effects, no counters — so it is directly testable and
+ * reusable for both the live scan loop and the ZZ future-proofing fixture.
+ *
+ * @param {object} track - A parseTracks() descriptor.
+ * @param {object} company - A tracked_companies entry.
+ * @param {{title?: string, location?: string, url?: string, salary?: object, description?: string}} job - A fetched posting.
+ * @returns {boolean}
+ */
+export function trackAdmits(track, company, job) {
+  if (!isEligible(track, company)) return false;
+  if (!track.titleFilter(job.title)) return false;
+  if (!track.locationFilter(job.location, job.url, job.title)) return false;
+  if (!track.salaryFilter(job.salary)) return false;
+  if (!track.contentFilter(job.description, matchedTitleKeywords(job.title, track.rawTitleFilter))) return false;
+  return true;
+}
+
+export function mergeLocationHints(tracks, company) {
+  const eligible = tracks.filter(t => isEligible(t, company) && t.rawLocationFilter);
+  if (eligible.length === 0) return undefined;
+  if (eligible.length === 1) return eligible[0].rawLocationFilter;
+
+  const unionField = (field) => {
+    const seen = new Set();
+    const out = [];
+    for (const t of eligible) {
+      for (const v of (t.rawLocationFilter[field] || [])) {
+        if (!seen.has(v)) { seen.add(v); out.push(v); }
+      }
+    }
+    return out;
+  };
+  const intersectField = (field) => {
+    let acc = null;
+    for (const t of eligible) {
+      const vals = new Set(t.rawLocationFilter[field] || []);
+      acc = acc === null ? vals : new Set([...acc].filter(v => vals.has(v)));
+    }
+    return [...(acc || [])];
+  };
+  return {
+    always_allow: unionField('always_allow'),
+    allow: unionField('allow'),
+    block: intersectField('block'),
+    block_hard: intersectField('block_hard'),
+  };
+}
+
 export function companyMatch(jobCompany, windowCompany) {
   // Unicode-aware (#2393 family): the [a-z0-9] strip this used to carry erased
   // non-Latin scripts outright, so 株式会社アカネ and 合同会社ゾロ both cleaned
@@ -2548,6 +2695,16 @@ export function formatPipelineOffer(offer) {
   // posted:, before note:, for a stable serialization.
   const trust = formatTrustSegment(offer);
   if (trust) line = `${line} | ${trust}`;
+  // Labeled track-provenance segment (#track-unification, 2026-09-21) — which
+  // track(s) admitted this posting. Rides like posted:/trust/note: (a labeled
+  // trailing segment, not a positional cell) so existing readers that index
+  // cells[0..2] and ignore the rest are unaffected; an offer with no `tracks`
+  // (any caller outside scan.mjs's own main loop) formats byte-identically to
+  // before this feature existed. Comma-joined in the order a posting's tracks
+  // were evaluated, uppercased for readability (a, c -> A,C).
+  if (Array.isArray(offer.tracks) && offer.tracks.length > 0) {
+    line = `${line} | track: ${offer.tracks.map(t => String(t).toUpperCase()).join(',')}`;
+  }
   // Optional free-text ranking signal (e.g. a curated-list flag an importer
   // attaches). Labeled — not positional like location/compensation — so it can
   // ride on any row shape (bare URL, 3-, 4-, or 5-column) without a reader
@@ -3239,14 +3396,14 @@ function guardStatusFor(code) {
 const KNOWN_FLAGS = [
   '--dry-run', '--verify', '--headed-fallback', '--throttle', '--rediscover-404',
   '--include-blacklisted', '--company', '--posted-after', '--posted-before',
-  '--since', '--quiet', '--json', '--help', '-h',
+  '--since', '--quiet', '--json', '--help', '-h', '--track', '--list-tracks',
 ];
 
 // Flags whose space-separated value is the NEXT argv token (the `--flag=value`
 // form is self-contained and never needs this). --throttle is deliberately
 // excluded: only its bare and `--throttle=<ms>` forms are read below, so a
 // following token is never its value.
-const VALUE_FLAGS = ['--company', '--posted-after', '--posted-before', '--since'];
+const VALUE_FLAGS = ['--company', '--posted-after', '--posted-before', '--since', '--track'];
 
 const USAGE = `Usage:
   node scan.mjs                              # scan all enabled companies
@@ -3263,6 +3420,8 @@ const USAGE = `Usage:
   node scan.mjs --posted-before 2026-08-01   # absolute upper bound on posting date
   node scan.mjs --json                       # emit one machine-readable receipt on stdout
   node scan.mjs --quiet                      # suppress the manifesto footer
+  node scan.mjs --list-tracks                # print every declared track (id, scope, tag, eligible companies)
+  node scan.mjs --track b                    # evaluate only this track's rule-set this run (comma list OK)
   node scan.mjs --help                       # print this usage block and exit`;
 
 async function main() {
@@ -3397,6 +3556,45 @@ async function main() {
   const salaryFilter = buildSalaryFilter(config.salary_filter);
   const trustValidator = buildTrustValidator(config.trust_filter);
   const contentFilter = buildContentFilter(config.content_filter);
+
+  // #track-unification (2026-09-21): the open-ended tracks map. parseTracks()
+  // is the ONE place its structure is interpreted; nothing below ever reads
+  // config.tracks directly or branches on a literal track id, which is what
+  // lets a future track be added as a pure YAML edit.
+  let allTracks;
+  try {
+    allTracks = parseTracks(config);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
+
+  if (args.includes('--list-tracks')) {
+    console.log('id    scope   tag                    eligible-companies');
+    for (const t of allTracks) {
+      const eligible = companies.filter(c => isEligible(t, c)).length;
+      console.log(`${t.id.padEnd(6)}${t.scope.padEnd(8)}${(t.tag || '-').padEnd(23)}${eligible}`);
+    }
+    return;
+  }
+
+  // --track <id>[,<id>...]: restrict which tracks this run evaluates. Does
+  // NOT change which companies get fetched — a company ineligible for every
+  // requested track still gets skipped downstream, same as before.
+  const trackArg = requireValue('--track');
+  let tracks = allTracks;
+  if (trackArg != null) {
+    const requestedIds = trackArg.split(',').map(s => s.trim()).filter(Boolean);
+    const validIds = new Set(allTracks.map(t => t.id));
+    const unknown = requestedIds.filter(id => !validIds.has(id));
+    if (unknown.length > 0) {
+      console.error(`Error: unknown track "${unknown[0]}" — available: ${[...validIds].join(', ')}`);
+      process.exit(1);
+    }
+    const requestedSet = new Set(requestedIds);
+    tracks = allTracks.filter(t => requestedSet.has(t.id));
+  }
+
   const candidateCountry = loadCandidateCountry();
   const countryEligibilityFilter = buildCountryEligibilityFilter(config.country_eligibility_filter, candidateCountry);
   const visaFilter = buildVisaFilter(config.visa_filter);
@@ -3556,7 +3754,7 @@ async function main() {
       }),
       sinceMs: earlyStopSinceMs,
       includeUndated: true,
-      locationHints: config.location_filter,
+      locationHints: mergeLocationHints(tracks, company) ?? config.location_filter,
     };
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {
@@ -3611,18 +3809,19 @@ async function main() {
           }
         }
 
-        if (!titleFilter(job.title)) {
-          totalFilteredTitle++;
-          continue;
-        }
+        // Run-level filters (#track-unification): candidate-wide truths,
+        // independent of which track a posting might clear, evaluated once
+        // regardless of track count. Reordered relative to the pre-merge
+        // chain (tier/posting-age/posted-date/country/visa used to be
+        // interleaved with the title/location/salary/content checks below);
+        // this is a pure AND of independent predicates, so the final
+        // admit/reject decision for a single-track run is unchanged — only
+        // which counter fires first for a posting that fails on more than
+        // one dimension at once shifts, and these counters feed a stdout
+        // summary line plus the receipt's `filtered` SUM (R13), never an
+        // exact per-reason value asserted by a test.
         if (classifyTier && skipTiers.includes(classifyTier(job.title))) {
           totalFilteredTier++;
-          continue;
-        }
-        // job.title is passed so a role whose remoteness is stated in the title
-        // ("Program Manager - Remote") isn't rejected for a city-only location.
-        if (!locationFilter(job.location, job.url, job.title)) {
-          totalFilteredLocation++;
           continue;
         }
         if (!postingAgeFilter(job.postedAt)) {
@@ -3633,14 +3832,6 @@ async function main() {
           totalFilteredPostedDate++;
           continue;
         }
-        if (!salaryFilter(job.salary)) {
-          totalFilteredSalary++;
-          continue;
-        }
-        if (!contentFilter(job.description, matchedTitleKeywords(job.title, config.title_filter))) {
-          totalFilteredContent++;
-          continue;
-        }
         if (!countryEligibilityFilter(job.description)) {
           totalFilteredCountryEligibility++;
           continue;
@@ -3649,6 +3840,35 @@ async function main() {
           totalFilteredVisa++;
           continue;
         }
+
+        // Per-track lane policy: title/location/salary/content. A posting is
+        // admitted by a track only when it clears ALL FOUR of that track's
+        // own filters. Track a's own chain is tested via the legacy
+        // titleFilter/locationFilter/salaryFilter/contentFilter closures
+        // (built from config.title_filter etc., which ARE tracks.a's own
+        // values via YAML alias) so the totalFilteredTitle/Location/Salary/
+        // Content counters keep their exact pre-merge meaning — a posting
+        // that fails one of these against track a increments the legacy
+        // counter unconditionally, even if a DIFFERENT track later admits
+        // it. That is a deliberate, informational-only divergence: the
+        // counters describe track a's own funnel specifically, now one lane
+        // among possibly several, never the final admit decision.
+        const matchedTracks = [];
+        for (const track of tracks) {
+          if (!isEligible(track, company)) continue;
+          if (track.id === 'a') {
+            if (!titleFilter(job.title)) { totalFilteredTitle++; continue; }
+            if (!locationFilter(job.location, job.url, job.title)) { totalFilteredLocation++; continue; }
+            if (!salaryFilter(job.salary)) { totalFilteredSalary++; continue; }
+            if (!contentFilter(job.description, matchedTitleKeywords(job.title, config.title_filter))) { totalFilteredContent++; continue; }
+            matchedTracks.push(track.id);
+            continue;
+          }
+          if (trackAdmits(track, company, job)) matchedTracks.push(track.id);
+        }
+        if (matchedTracks.length === 0) continue;
+        job.tracks = matchedTracks;
+
         const dedupUrl = normalizeUrlForDedup(job.url);
         if (seenUrls.has(dedupUrl)) {
           totalDupes++;
@@ -3878,6 +4098,21 @@ async function main() {
     console.log(`Invalid (guarded):     ${invalidOffers.length} dropped`);
   }
   console.log(`New offers added:      ${verifiedOffers.length}`);
+
+  // Per-track summary (#track-unification, 2026-09-21) — stdout only, per
+  // R13: no change to the JSON receipt or data/scan-runs.tsv, both of which
+  // are policed by exact-shape tests. Counts eligible-and-fetched companies
+  // (targets, not the full registry) and admits from verifiedOffers' own
+  // job.tracks membership, so a company scanned under 2+ tracks and every
+  // admitted-by-2+-tracks posting are each counted once per track, not once
+  // overall.
+  if (tracks.length > 0) {
+    for (const track of tracks) {
+      const eligibleScanned = targets.filter(t => !t._isBoard && isEligible(track, t)).length;
+      const admitted = verifiedOffers.filter(o => Array.isArray(o.tracks) && o.tracks.includes(track.id)).length;
+      console.log(`Track ${track.id.toUpperCase()}:               ${eligibleScanned} companies evaluated, ${admitted} admitted`);
+    }
+  }
 
   // Trust validation summary (only when trust_filter is configured)
   if (config.trust_filter && config.trust_filter.enabled !== false && verifiedOffers.length > 0) {
