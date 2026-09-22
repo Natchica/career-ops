@@ -163,6 +163,97 @@ async function loadProviderIds() {
 }
 
 const TITLE_FILTER_FIELDS = ['positive', 'negative', 'seniority_boost'];
+const TRACK_FIELDS = ['scope', 'tag', 'title_filter', 'location_filter', 'salary_filter', 'content_filter', 'search_queries', 'job_boards'];
+
+/**
+ * Validates the title_filter/location_filter/content_filter/salary_filter
+ * quartet shared by the flat top-level config and each tracks.<id> block
+ * (#track-unification, 2026-09-21) — one shape, checked at whatever path
+ * prefix the caller is validating.
+ *
+ * @param {object} block - The object carrying these keys (top-level config, or a tracks.<id> block).
+ * @param {string} prefix - '' for the flat top-level, `tracks.${id}` for a track.
+ * @param {Array} errors
+ * @param {Array} warnings
+ */
+function validateFilterQuartet(block, prefix, errors, warnings) {
+  const path = (suffix) => (prefix ? `${prefix}.${suffix}` : suffix);
+
+  if (block.title_filter !== undefined) {
+    if (!isObject(block.title_filter)) {
+      add(errors, path('title_filter'), 'title_filter must be an object');
+    } else {
+      validateKeywordList(block.title_filter.positive, path('title_filter.positive'), errors);
+      validateKeywordList(block.title_filter.negative, path('title_filter.negative'), errors);
+      validateKeywordList(block.title_filter.seniority_boost, path('title_filter.seniority_boost'), errors);
+    }
+  }
+
+  if (block.location_filter !== undefined) {
+    if (!isObject(block.location_filter)) {
+      add(errors, path('location_filter'), 'location_filter must be an object');
+    } else {
+      validateKeywordList(block.location_filter.always_allow, path('location_filter.always_allow'), errors);
+      validateKeywordList(block.location_filter.allow, path('location_filter.allow'), errors);
+      validateKeywordList(block.location_filter.block, path('location_filter.block'), errors);
+      validateKeywordList(block.location_filter.block_hard, path('location_filter.block_hard'), errors);
+      if (block.location_filter.strict !== undefined && typeof block.location_filter.strict !== 'boolean') {
+        add(errors, path('location_filter.strict'), 'must be a boolean when set');
+      }
+    }
+  }
+
+  if (block.salary_filter !== undefined) {
+    if (!isObject(block.salary_filter)) {
+      add(errors, path('salary_filter'), 'salary_filter must be an object');
+    } else {
+      if (block.salary_filter.min !== undefined && !Number.isFinite(Number(block.salary_filter.min))) {
+        add(errors, path('salary_filter.min'), 'must be a number when set');
+      }
+      if (block.salary_filter.max !== undefined && !Number.isFinite(Number(block.salary_filter.max))) {
+        add(errors, path('salary_filter.max'), 'must be a number when set');
+      }
+      if (block.salary_filter.currency !== undefined && (typeof block.salary_filter.currency !== 'string' || !block.salary_filter.currency.trim())) {
+        add(errors, path('salary_filter.currency'), 'must be a non-empty string when set');
+      }
+    }
+  }
+
+  if (block.content_filter !== undefined) {
+    if (!isObject(block.content_filter)) {
+      add(errors, path('content_filter'), 'content_filter must be an object');
+    } else {
+      validateKeywordList(block.content_filter.positive, path('content_filter.positive'), errors);
+      validateKeywordList(block.content_filter.negative, path('content_filter.negative'), errors);
+      if (block.content_filter.by_title_keyword !== undefined) {
+        if (!isObject(block.content_filter.by_title_keyword)) {
+          add(errors, path('content_filter.by_title_keyword'), 'by_title_keyword must be an object keyed by title_filter.positive keyword');
+        } else {
+          // Cross-references THIS block's own title_filter.positive, not the
+          // flat one — a track's content_filter override is scoped to its
+          // own lane's title keywords.
+          const titlePositive = new Set(
+            (Array.isArray(block.title_filter?.positive) ? block.title_filter.positive : [])
+              .filter(k => typeof k === 'string')
+              .map(k => k.trim().toLowerCase())
+          );
+          for (const [kw, rule] of Object.entries(block.content_filter.by_title_keyword)) {
+            const p = path(`content_filter.by_title_keyword.${kw}`);
+            if (!titlePositive.has(kw.trim().toLowerCase())) {
+              add(warnings, p, `"${kw}" does not match any title_filter.positive keyword and will never apply`);
+            }
+            if (!isObject(rule)) {
+              add(errors, p, 'must be an object with positive/negative keyword lists');
+              continue;
+            }
+            validateKeywordList(rule.positive, `${p}.positive`, errors);
+            validateKeywordList(rule.negative, `${p}.negative`, errors);
+          }
+        }
+      }
+    }
+  }
+}
 
 export async function validatePortalsConfig(config, { providerIds = new Set() } = {}) {
   const errors = [];
@@ -173,13 +264,46 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
     return { errors, warnings };
   }
 
-  if (config.title_filter !== undefined) {
-    if (!isObject(config.title_filter)) {
-      add(errors, 'title_filter', 'title_filter must be an object');
+  validateFilterQuartet(config, '', errors, warnings);
+
+  // #track-unification (2026-09-21): the open-ended tracks map. Absent
+  // entirely is valid (the legacy flat-only schema — templates/portals.example.yml
+  // and any fork that never migrated); present but empty, or malformed, is a
+  // real misconfiguration and an error — never a silent skip that would read
+  // as "0 warnings, all fine" (mirrors scan.mjs's parseTracks fallback rule).
+  const declaredTags = [];
+  if (config.tracks !== undefined) {
+    if (!isObject(config.tracks) || Object.keys(config.tracks).length === 0) {
+      add(errors, 'tracks', 'tracks must be a non-empty object when set');
     } else {
-      validateKeywordList(config.title_filter.positive, 'title_filter.positive', errors);
-      validateKeywordList(config.title_filter.negative, 'title_filter.negative', errors);
-      validateKeywordList(config.title_filter.seniority_boost, 'title_filter.seniority_boost', errors);
+      for (const [id, def] of Object.entries(config.tracks)) {
+        const prefix = `tracks.${id}`;
+        if (!isObject(def)) {
+          add(errors, prefix, 'track must be an object');
+          continue;
+        }
+        for (const key of Object.keys(def)) {
+          if (!TRACK_FIELDS.includes(key)) {
+            add(errors, `${prefix}.${key}`, `unknown track field - expected one of ${TRACK_FIELDS.join(', ')}`);
+          }
+        }
+        if (def.scope !== 'all' && def.scope !== 'tagged') {
+          add(errors, `${prefix}.scope`, 'scope must be "all" or "tagged"');
+        } else if (def.scope === 'tagged') {
+          if (typeof def.tag !== 'string' || !def.tag.trim()) {
+            add(errors, `${prefix}.tag`, 'a scope: tagged track must have a non-empty string tag');
+          } else {
+            declaredTags.push(def.tag);
+          }
+        }
+        validateFilterQuartet(def, prefix, errors, warnings);
+        if (def.search_queries !== undefined && !Array.isArray(def.search_queries)) {
+          add(errors, `${prefix}.search_queries`, 'search_queries must be an array when set');
+        }
+        if (def.job_boards !== undefined && !Array.isArray(def.job_boards)) {
+          add(errors, `${prefix}.job_boards`, 'job_boards must be an array when set');
+        }
+      }
     }
   }
 
@@ -205,52 +329,6 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
       validateKeywordList(config.title_filter_full.positive, 'title_filter_full.positive', errors);
       validateKeywordList(config.title_filter_full.negative, 'title_filter_full.negative', errors);
       validateKeywordList(config.title_filter_full.seniority_boost, 'title_filter_full.seniority_boost', errors);
-    }
-  }
-
-  if (config.location_filter !== undefined) {
-    if (!isObject(config.location_filter)) {
-      add(errors, 'location_filter', 'location_filter must be an object');
-    } else {
-      validateKeywordList(config.location_filter.always_allow, 'location_filter.always_allow', errors);
-      validateKeywordList(config.location_filter.allow, 'location_filter.allow', errors);
-      validateKeywordList(config.location_filter.block, 'location_filter.block', errors);
-      validateKeywordList(config.location_filter.block_hard, 'location_filter.block_hard', errors);
-      if (config.location_filter.strict !== undefined && typeof config.location_filter.strict !== 'boolean') {
-        add(errors, 'location_filter.strict', 'must be a boolean when set');
-      }
-    }
-  }
-
-  if (config.content_filter !== undefined) {
-    if (!isObject(config.content_filter)) {
-      add(errors, 'content_filter', 'content_filter must be an object');
-    } else {
-      validateKeywordList(config.content_filter.positive, 'content_filter.positive', errors);
-      validateKeywordList(config.content_filter.negative, 'content_filter.negative', errors);
-      if (config.content_filter.by_title_keyword !== undefined) {
-        if (!isObject(config.content_filter.by_title_keyword)) {
-          add(errors, 'content_filter.by_title_keyword', 'by_title_keyword must be an object keyed by title_filter.positive keyword');
-        } else {
-          const titlePositive = new Set(
-            (Array.isArray(config.title_filter?.positive) ? config.title_filter.positive : [])
-              .filter(k => typeof k === 'string')
-              .map(k => k.trim().toLowerCase())
-          );
-          for (const [kw, rule] of Object.entries(config.content_filter.by_title_keyword)) {
-            const path = `content_filter.by_title_keyword.${kw}`;
-            if (!titlePositive.has(kw.trim().toLowerCase())) {
-              add(warnings, path, `"${kw}" does not match any title_filter.positive keyword and will never apply`);
-            }
-            if (!isObject(rule)) {
-              add(errors, path, 'must be an object with positive/negative keyword lists');
-              continue;
-            }
-            validateKeywordList(rule.positive, `${path}.positive`, errors);
-            validateKeywordList(rule.negative, `${path}.negative`, errors);
-          }
-        }
-      }
     }
   }
 
@@ -335,6 +413,27 @@ export async function validatePortalsConfig(config, { providerIds = new Set() } 
 
   validateEntryList(config.tracked_companies, 'tracked_companies', 'company');
   validateEntryList(config.job_boards, 'job_boards', 'job board');
+
+  // Orphan tag-field warning (#track-unification, 2026-09-21): a company
+  // field that LOOKS like a track-eligibility tag (matches /^track.*_/, the
+  // trackb_whitelisted naming convention) but that no declared track claims
+  // as its own `tag` is almost certainly a typo (trackb_whitelist vs
+  // trackb_whitelisted) that would silently empty a scope: tagged lane —
+  // the company thinks it's tagged in, the track never sees it.
+  if (Array.isArray(config.tracked_companies)) {
+    const declaredTagSet = new Set(declaredTags);
+    const warnedFields = new Set();
+    for (const [idx, entry] of config.tracked_companies.entries()) {
+      if (!isObject(entry)) continue;
+      for (const field of Object.keys(entry)) {
+        if (!/^track.*_/i.test(field)) continue;
+        if (declaredTagSet.has(field)) continue;
+        if (warnedFields.has(field)) continue;
+        warnedFields.add(field);
+        add(warnings, `tracked_companies[${idx}].${field}`, `"${field}" looks like a track-eligibility tag but no track declares it as its tag — check for a typo`);
+      }
+    }
+  }
 
   return { errors, warnings };
 }
