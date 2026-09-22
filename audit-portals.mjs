@@ -64,6 +64,7 @@ import { loadProviders, resolveProvider } from './providers/_registry.mjs';
 import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
+import { parseTracks, isEligible } from './scan.mjs';
 
 // Anchored, not cwd-relative. Both paths below used to be bare relative
 // strings, which silently audited nothing the moment the script was invoked
@@ -214,6 +215,7 @@ export async function auditCompanies(companies, {
   httpCtx = null,
   smallThreshold = DEFAULT_SMALL_THRESHOLD,
   concurrency = 6,
+  tracks = null,
 } = {}) {
   const list = (Array.isArray(companies) ? companies : []).filter(
     (c) => c && typeof c === 'object' && c.enabled !== false,
@@ -250,6 +252,10 @@ export async function auditCompanies(companies, {
         count,
         detail,
         samples: sampleJobs(result.jobs || []),
+        // #track-unification (2026-09-21): which lane(s) this board feeds.
+        // Undefined (not []) when the caller passed no tracks, so JSON output
+        // for a caller on the legacy flat schema is byte-identical to before.
+        ...(tracks ? { eligibleTracks: tracks.filter(t => isEligible(t, entry)).map(t => t.id) } : {}),
       });
     }
   };
@@ -427,8 +433,15 @@ async function main() {
     return; // advisory even with --strict; no providers loaded or network calls
   }
 
+  // #track-unification (2026-09-21): per-track eligibility in the report, so
+  // "which lanes does this dead board starve?" is answerable. parseTracks
+  // gracefully degrades to a single implicit track on the legacy flat schema
+  // (no `tracks` key), so this is safe on any portals.yml shape.
+  const rawCfg = yaml.load(readFileSync(filePath, 'utf-8')) || {};
+  const tracks = parseTracks(rawCfg);
+
   const providers = await loadProviders(PROVIDERS_DIR);
-  const rows = await auditCompanies(companies, { providers, smallThreshold });
+  const rows = await auditCompanies(companies, { providers, smallThreshold, tracks });
 
   let drops = [];
   const baselinePath = flagValue(args, '--baseline');
@@ -452,7 +465,8 @@ async function main() {
     console.log(`audit-portals: ${filePath}\n`);
     for (const r of rows) {
       if (summary) {
-        console.log(`  ${ICON[r.verdict] || '·'} ${r.name} — ${r.provider} (${r.detail})`);
+        const tracksNote = r.eligibleTracks ? ` [${r.eligibleTracks.join(',') || 'none'}]` : '';
+        console.log(`  ${ICON[r.verdict] || '·'} ${r.name} — ${r.provider} (${r.detail})${tracksNote}`);
         continue;
       }
       if (r.verdict === 'ok') continue; // full mode reports only what needs a look
