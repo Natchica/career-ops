@@ -10,9 +10,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseTracks, isEligible } from '../scan.mjs';
 
+// Cases run against tests/fixtures/portals-tracks.yml, never the user-layer
+// portals.yml: that file is gitignored and changes whenever the user edits
+// their search, so a count read from it asserts nothing about this code.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '..');
-const portals = yaml.load(readFileSync(join(ROOT, 'portals.yml'), 'utf8'));
+const portals = yaml.load(readFileSync(join(__dirname, 'fixtures/portals-tracks.yml'), 'utf8'));
 
 test('parseTracks returns 3 rows in declaration order with the right scope/tag', () => {
   const tracks = parseTracks(portals);
@@ -66,11 +68,27 @@ test('isEligible: scope tagged requires the exact boolean true on the named fiel
   assert.strictEqual(isEligible(track, { trackb_whitelisted: 'yes' }), false);
 });
 
-test('real portals.yml: 99 companies eligible for track a, 30 for track b, 99 for track c (eligibility ignores enabled)', () => {
-  const tracks = parseTracks(portals);
-  const byId = Object.fromEntries(tracks.map(t => [t.id, t]));
-  const companies = portals.tracked_companies;
-  assert.strictEqual(companies.filter(c => isEligible(byId.a, c)).length, 99);
-  assert.strictEqual(companies.filter(c => isEligible(byId.b, c)).length, 30);
-  assert.strictEqual(companies.filter(c => isEligible(byId.c, c)).length, 99);
+test('fixture registry: 6 eligible for track a, 2 for track b, 6 for track c (eligibility ignores enabled; only boolean true counts)', () => {
+  const byId = Object.fromEntries(parseTracks(portals).map(t => [t.id, t]));
+  const eligible = (id) => portals.tracked_companies.filter(c => isEligible(byId[id], c)).map(c => c.name);
+  assert.strictEqual(eligible('a').length, 6);
+  assert.deepStrictEqual(eligible('b'), ['Alpha Tagged', 'Beta Tagged Disabled']);
+  assert.strictEqual(eligible('c').length, 6);
+});
+
+test('legacy-shape entry (name + careers_url only) is eligible for scope: all tracks, not for tagged', () => {
+  const byId = Object.fromEntries(parseTracks(portals).map(t => [t.id, t]));
+  const legacy = portals.tracked_companies.find(c => c.name === 'Zeta Legacy');
+  assert.deepStrictEqual(Object.keys(legacy).sort(), ['careers_url', 'name']);
+  assert.strictEqual(isEligible(byId.a, legacy), true);
+  assert.strictEqual(isEligible(byId.b, legacy), false);
+  assert.strictEqual(isEligible(byId.c, legacy), true);
+});
+
+test('removing the tracks map falls back to one implicit track a covering the whole registry', () => {
+  const flat = { ...portals };
+  delete flat.tracks;
+  const legacy = parseTracks(flat);
+  assert.deepStrictEqual(legacy.map(t => t.id), ['a']);
+  assert.strictEqual(portals.tracked_companies.filter(c => isEligible(legacy[0], c)).length, 6);
 });
