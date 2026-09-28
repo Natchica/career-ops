@@ -1,0 +1,66 @@
+# tests/fixtures/portals-tracks.yml — synthetic portals.yml for the track tests
+# (scan-track-loader, portals-tracks-schema). Fictional companies on
+# example.com only. Never copy the user-layer portals.yml here: it is
+# gitignored personal config and changes whenever the search does.
+#
+# Registry cases (6 entries) and the tracks each is eligible for:
+#   Alpha Tagged          trackb_whitelisted: true, enabled   -> a, b, c
+#   Beta Tagged Disabled  trackb_whitelisted: true, disabled  -> a, b, c (eligibility ignores enabled)
+#   Gamma Untagged        no tag                              -> a, c
+#   Delta Tag False       trackb_whitelisted: false           -> a, c
+#   Epsilon String Tag    trackb_whitelisted: "true" (string) -> a, c (only boolean true counts)
+#   Zeta Legacy           legacy shape: name + careers_url    -> a, c
+
+location_filter: &shared_location
+  allow: ["Remote", "Zurich"]
+  block: ["On-site only"]
+
+title_filter:
+  positive: ["Engineer"]
+  negative: ["Intern"]
+
+tracked_companies:
+  - name: Alpha Tagged
+    careers_url: https://alpha.example.com/careers
+    enabled: true
+    trackb_whitelisted: true
+  - name: Beta Tagged Disabled
+    careers_url: https://beta.example.com/careers
+    enabled: false
+    trackb_whitelisted: true
+  - name: Gamma Untagged
+    careers_url: https://gamma.example.com/careers
+    enabled: true
+  - name: Delta Tag False
+    careers_url: https://delta.example.com/careers
+    enabled: true
+    trackb_whitelisted: false
+  - name: Epsilon String Tag
+    careers_url: https://epsilon.example.com/careers
+    enabled: true
+    trackb_whitelisted: "true"
+  - name: Zeta Legacy
+    careers_url: https://zeta.example.com/careers
+
+tracks:
+  a:
+    scope: all
+    title_filter:
+      positive: ["Backend", "Software Engineer"]
+      negative: ["Intern"]
+    location_filter: *shared_location
+  b:
+    scope: tagged
+    tag: trackb_whitelisted
+    title_filter:
+      positive: ["Engineer"]
+    location_filter:
+      allow: ["Switzerland"]
+    salary_filter:
+      min: 80000
+      currency: CHF
+  c:
+    scope: all
+    title_filter:
+      positive: ["Research Engineer"]
+    location_filter: *shared_location
