@@ -13453,7 +13453,13 @@ try {
   // No project MCP config → doctor surfaces a (non-fatal) warning instead of
   // letting SPA job boards fail silently.
   const noMcp = mkdtempSync(join(tmpdir(), 'co-nomcp-'));
-  const a = JSON.parse(run(NODE, ['doctor.mjs', '--json', '--target', noMcp], doctorEnv) || '{}');
+  // cwd: noMcp like the cases below — doctor reads MCP config from the launch
+  // checkout, so running from ROOT would see the developer's own .mcp.json.
+  const a = JSON.parse(execFileSync(
+    NODE,
+    [join(ROOT, 'doctor.mjs'), '--json', '--target', noMcp],
+    { ...doctorEnv, cwd: noMcp, encoding: 'utf8' },
+  ) || '{}');
   if (Array.isArray(a.warnings) && a.warnings.some((w) => /playwright mcp/i.test(w))) {
     pass('No Playwright MCP config → warning surfaced');
   } else {
