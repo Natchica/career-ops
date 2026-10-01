@@ -52,7 +52,11 @@ const CAREER_OPS_CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = resolveTrackerPath(CAREER_OPS);
 
 // --- CLI args ---
-const args = process.argv.slice(2);
+// Empty when imported (scan.mjs, detect-reposts.mjs, and transitively
+// audit-portals.mjs import helpers from here): the --file/--id operand checks
+// below run at module scope, so reading the importer's process.argv would
+// make `audit-portals.mjs --file --help` exit with invite-match's error.
+const args = isMainModule(import.meta.url) ? process.argv.slice(2) : [];
 
 // #2854: --help was never checked and an unrecognized/mistyped flag (e.g.
 // `--sumary`) silently fell through instead of failing fast — same shape as
