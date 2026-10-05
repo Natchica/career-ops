@@ -31,6 +31,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `cover.md` | `cover` | Cover letter generator |
 | `email.md` | `email` | Application email drafts (draft-only) |
 | `contacto.md` | `contacto` | LinkedIn outreach messages |
+| `cabinet.md` | `cabinet` | Search-firm channel: discover, vet, Brief, Consultant outreach, Mandate intake, Check-ins (draft-only) |
 | `deep.md` | `deep` | Deep company-research prompt |
 | `interview.md` | `interview` | Interactive profile & CV onboarding |
 | `master-profile.md` | `master-profile` | Source-backed Master Career Profile import and review |
