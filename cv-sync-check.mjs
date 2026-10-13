@@ -82,7 +82,8 @@ function main() {
       ? `config/profile.yml not found: CAREER_OPS_PROFILE names ${profilePath}. Create that file, or unset the variable.`
       : 'config/profile.yml not found. Copy from config/profile.example.yml and fill in your details.');
   } else {
-    const profileContent = readFileSync(profilePath, 'utf-8');
+    // Strip YAML comment lines so commented-out examples (e.g. `# signature_name: "Jane Smith"`) are not read as live values.
+    const profileContent = readFileSync(profilePath, 'utf-8').replace(/^\s*#.*$/gm, '');
     const requiredFields = ['full_name', 'email', 'location'];
     for (const field of requiredFields) {
       if (!profileContent.includes(field) || profileContent.includes(`"Jane Smith"`)) {
