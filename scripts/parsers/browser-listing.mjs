@@ -12,8 +12,10 @@
 //        [--exclude REGEX] [--location TEXT] [--timeout MS]
 
 import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withPipelineLock } from '../../pipeline-lock.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EXTRACTOR = path.resolve(HERE, '../../browser-extract.mjs');
@@ -33,10 +35,23 @@ const include = new RegExp(linkPattern, 'i');
 const exclude = arg('exclude') ? new RegExp(arg('exclude'), 'i') : null;
 const location = arg('location', '');
 
-const raw = execFileSync(
-  process.execPath,
-  [EXTRACTOR, url, '--mode', 'listing', '--timeout', arg('timeout', '30000')],
-  { encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024 },
+// scan.mjs runs parsers concurrently and each run launches its own Chromium, so
+// serialize them across processes. The wait ceiling is 60 s per browser-listing
+// board configured in portals.yml (6 boards -> 360 s); parser.timeout_ms there
+// must exceed it by one extract run.
+const LOCK_WAIT_MS = 360_000;
+const startedWaiting = Date.now();
+const raw = await withPipelineLock(
+  path.join(tmpdir(), 'career-ops-browser-listing'),
+  () => {
+    process.stderr.write(`browser-listing: lock acquired after ${Date.now() - startedWaiting} ms\n`);
+    return execFileSync(
+      process.execPath,
+      [EXTRACTOR, url, '--mode', 'listing', '--timeout', arg('timeout', '30000')],
+      { encoding: 'utf-8', maxBuffer: 32 * 1024 * 1024, timeout: 120_000 },
+    );
+  },
+  { timeoutMs: LOCK_WAIT_MS, maxWaitMs: LOCK_WAIT_MS },
 );
 
 const payload = JSON.parse(raw);
