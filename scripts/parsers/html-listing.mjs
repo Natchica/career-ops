@@ -9,6 +9,10 @@
 // Usage:
 //   node scripts/parsers/html-listing.mjs --url URL --link-pattern REGEX
 //        [--exclude REGEX] [--cookies] [--title-from-heading] [--location TEXT]
+//        [--strip-params NAME[,NAME...]]
+//
+//   --strip-params  drop these query parameters from every emitted URL (e.g.
+//                   a per-fetch session id), so the URL stays a stable dedup key
 //
 //   --cookies    replay Set-Cookie from a first request (servers that reject
 //                cookieless clients with a "Cookie not accepted" interstitial)
@@ -38,6 +42,7 @@ if (!url || !linkPattern) {
 const include = new RegExp(linkPattern, 'i');
 const exclude = arg('exclude') ? new RegExp(arg('exclude'), 'i') : null;
 const fixedLocation = arg('location', '');
+const stripParams = (arg('strip-params') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
 // Follows redirects by hand so cookies set on an intermediate hop are replayed
 // on the next one. fetch's own redirect:'follow' drops them, which is exactly
@@ -103,7 +108,9 @@ for (const m of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/
   if (exclude && exclude.test(href)) continue;
   const title = titleFromHeading ? headingBefore(m.index) : clean(m[2]);
   if (!title) continue;
-  const abs = new URL(href, finalUrl).toString();
+  const absUrl = new URL(href, finalUrl);
+  for (const p of stripParams) absUrl.searchParams.delete(p);
+  const abs = absUrl.toString();
   if (seen.has(abs)) continue;
   seen.add(abs);
   jobs.push({ title, url: abs, location: fixedLocation });
