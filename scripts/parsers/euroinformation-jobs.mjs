@@ -15,7 +15,7 @@ const argUrl = process.argv.indexOf('--url') !== -1 ? process.argv[process.argv.
 const START = argUrl || 'https://recrutement.creditmutuel.fr/fr/nos_offres.html';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0';
 // The card shows only an entity logo, never a name, so the group is the honest label.
-const COMPANY = 'Crédit Mutuel Alliance Fédérale';
+const COMPANY = 'Euro-Information';
 const MAX_PAGES = 80;
 
 const decode = s => String(s)
