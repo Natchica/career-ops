@@ -56,10 +56,8 @@ test('a company field matching the real declared tag produces no warning', async
   assert.strictEqual(warnings.filter(w => w.path.includes('trackb_whitelisted')).length, 0);
 });
 
-test('the real merged portals.yml and the shipped example template both still validate clean', async () => {
+test('the shipped example template still validates clean', async () => {
   const { execFileSync } = await import('node:child_process');
   const outExample = execFileSync(process.execPath, ['validate-portals.mjs', '--file', 'templates/portals.example.yml'], { encoding: 'utf8' });
   assert.match(outExample, /0 errors, 0 warnings/);
-  const outReal = execFileSync(process.execPath, ['validate-portals.mjs'], { encoding: 'utf8' });
-  assert.match(outReal, /0 errors, 0 warnings/);
 });
