@@ -103,13 +103,22 @@ function trackerSnapshotRows(md) {
   return rows;
 }
 
+/**
+ * Posting URLs on the checklist lines of a pipeline.md text. A Processed line
+ * leads with its report number or `#--` (`- [x] #111 | <url> | …`), so that
+ * optional first cell is skipped; reading it as the URL would make every
+ * processed or pre-screen-skipped posting look new to the next ingest.
+ */
+export function pipelineUrlsFromText(text) {
+  const urls = new Set();
+  for (const m of text.matchAll(/- \[[ xX!]\]\s+(?:#\S+\s*\|\s*)?(\S+)/g)) urls.add(m[1]);
+  return urls;
+}
+
 /** URLs already present in data/pipeline.md, for additive de-duplication. */
 function existingPipelineUrls() {
-  const urls = new Set();
-  if (!existsSync(PIPELINE_PATH)) return urls;
-  const text = readFileSync(PIPELINE_PATH, 'utf8');
-  for (const m of text.matchAll(/- \[[ xX]\]\s+(\S+)/g)) urls.add(m[1]);
-  return urls;
+  if (!existsSync(PIPELINE_PATH)) return new Set();
+  return pipelineUrlsFromText(readFileSync(PIPELINE_PATH, 'utf8'));
 }
 
 /** portals.yml, for its title_filter and location_filter. An unreadable file stops the run, as in scan.mjs. */
@@ -169,8 +178,8 @@ function buildSnapshot() {
     ? trackerSnapshotRows(readFileSync(APPLICATIONS_PATH, 'utf8')) : [];
   // pipeline.md uses a checklist format (`- [ ] url`), not a markdown table.
   const pipeline = existsSync(PIPELINE_PATH)
-    ? [...readFileSync(PIPELINE_PATH, 'utf8').matchAll(/- \[[ xX]\]\s+(\S+)/g)]
-        .map(m => Object.freeze({ url: m[1] }))
+    ? [...pipelineUrlsFromText(readFileSync(PIPELINE_PATH, 'utf8'))]
+        .map(url => Object.freeze({ url }))
     : [];
   return Object.freeze({
     applications: Object.freeze(applications),
