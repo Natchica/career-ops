@@ -38,6 +38,10 @@ _Avoid_: recruiter (unqualified)
 One opening a Cabinet is working and has presented to the candidate, recorded as a tracker row whose Via is that Cabinet.
 _Avoid_: mission, mandat, Suchauftrag, opportunity, lead
 
+**Lead**:
+A posting URL sitting in `data/pipeline.md` Pending that has not been evaluated yet, written there by the scanner or by an ingest plugin (`job-alerts`, `linkedin-alerts`). A Lead is not a Mandate: nobody presented it, and it carries no channel until it is evaluated.
+_Avoid_: opportunity, match (the email sender's word), offer (reserved for an evaluated posting and for `data/outcomes/`)
+
 **Brief**:
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
