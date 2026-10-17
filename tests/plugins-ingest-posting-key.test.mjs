@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newPipelineJobs } from '../plugins.mjs';
+import { newPipelineJobs, pipelineUrlsFromText } from '../plugins.mjs';
 
 const job = (url, title = 'Senior AI Engineer') => ({ title, url });
 
@@ -28,4 +28,35 @@ test('a posting already in the pipeline under another URL is not added again', (
 test('two different LinkedIn postings both stay', () => {
   const found = [job('https://www.linkedin.com/jobs/view/4100000001/'), job('https://www.linkedin.com/jobs/view/4100000009/')];
   assert.equal(newPipelineJobs(found, new Set()).length, 2);
+});
+
+const PIPELINE_MD = [
+  '## Pending',
+  '- [ ] https://a.example/jobs/1 | Acme | Rust Engineer',
+  '- [!] https://b.example/jobs/2',
+  '## Processed',
+  '- [x] #-- | https://www.linkedin.com/jobs/view/4100000003 | skipped (pre-screen mismatch: triage 2.4: needs 5+ years)',
+  '- [x] #111 | https://c.example/jobs/3 | ENSO | Lead Engineer',
+  '- [x] https://d.example/jobs/4 | Globex | Analyst',
+].join('\n');
+
+test('a Processed line in the "#NNN | url" form counts as already seen', () => {
+  assert.deepEqual([...pipelineUrlsFromText(PIPELINE_MD)].sort(), [
+    'https://a.example/jobs/1',
+    'https://b.example/jobs/2',
+    'https://c.example/jobs/3',
+    'https://d.example/jobs/4',
+    'https://www.linkedin.com/jobs/view/4100000003',
+  ]);
+});
+
+test('a posting already skipped in Processed is not added to the pipeline again', () => {
+  const found = [
+    job('https://www.linkedin.com/jobs/view/4100000003'),
+    job('https://www.linkedin.com/jobs/view/4100000004'),
+  ];
+  assert.deepEqual(
+    newPipelineJobs(found, pipelineUrlsFromText(PIPELINE_MD)).map((j) => j.url),
+    ['https://www.linkedin.com/jobs/view/4100000004'],
+  );
 });
