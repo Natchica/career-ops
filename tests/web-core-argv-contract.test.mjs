@@ -155,10 +155,12 @@ const CALL_SITES = [
   {
     source: 'web/src/lib/core/radar-run.ts',
     script: 'radar.mjs',
-    // The sources listing the radar routes read before planning a run. The
+    // The source listing and the completeness report the radar routes read.
+    // Both flags are accepted together, so this probe proves the script knows
+    // them; each one's own output is exercised in tests/radar-cli.test.mjs. The
     // preview and save argv are built at runtime by web/src/lib/radar-run.mjs
     // and are put to the real script in tests/radar-web-argv.test.mjs.
-    args: ['--sources'],
+    args: ['--sources', '--coverage'],
     probe: 'run',
   },
   {
