@@ -117,8 +117,8 @@ function emptyRow(key, name) {
 export function mergeRecords(rows, records, { canon, today, portalsNames }) {
   const out = rows.map((r) => ({ ...r }));
   const index = new Map(out.map((r) => [r.key, r]));
-  const newKeys = [];
-  const knownKeys = [];
+  const newKeys = new Set();
+  const knownKeys = new Set();
   const collisions = [];
 
   for (const record of records) {
@@ -140,11 +140,8 @@ export function mergeRecords(rows, records, { canon, today, portalsNames }) {
       out.push(row);
       index.set(key, row);
     }
-    if (isNew) {
-      if (!newKeys.includes(key)) newKeys.push(key);
-    } else if (!newKeys.includes(key) && !knownKeys.includes(key)) {
-      knownKeys.push(key);
-    }
+    if (isNew) newKeys.add(key);
+    else if (!newKeys.has(key)) knownKeys.add(key);
 
     const aliasAdds = [];
     if (record.legalName && record.legalName.trim() !== row.name) aliasAdds.push(record.legalName.trim());
@@ -168,5 +165,5 @@ export function mergeRecords(rows, records, { canon, today, portalsNames }) {
       row.portals_ref = portalsNames.get(baseK);
     }
   }
-  return { rows: out, newKeys, knownKeys, collisions };
+  return { rows: out, newKeys: [...newKeys], knownKeys: [...knownKeys], collisions };
 }
