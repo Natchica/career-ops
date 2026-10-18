@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseRegistry } from '../radar/registry.mjs';
+import { RADAR_COLUMNS, parseRegistry, serializeRegistry } from '../radar/registry.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FIXTURE = join(ROOT, 'tests', 'fixtures', 'radar', 'scan-history.tsv');
@@ -181,4 +181,33 @@ test('--sources marks a source with no vetted site as not built and says why', (
   assert.equal(dirs.auth, 'not-built');
   assert.match(dirs.reason, /no vetted site/);
   assert.equal(list.find((s) => s.id === 'sirene').reason, null);
+});
+
+test('--coverage reports recall against the scan-history baseline', () => {
+  const root = sandbox();
+  const acme = Object.fromEntries(RADAR_COLUMNS.map((c) => [c, '']));
+  Object.assign(acme, { key: 'acme', name: 'Acme AG', sites: 'Basel:B', country: 'CH', size_band: '?', signals: '0', sources: 'sirene', first_seen: '2026-10-18', last_seen: '2026-10-18', portals_ref: '—' });
+  writeFileSync(registryFile(root), serializeRegistry({ columns: [...RADAR_COLUMNS], rows: [acme] }));
+  const r = radar(root, ['--coverage']);
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.baseline.size, 2, 'Acme and Beta are in zone; Gamma is remote and Delta has no location');
+  assert.equal(out.recall_all, 0.5);
+  assert.equal(out.recall_excluding_ats_employers, 0.5);
+  assert.deepEqual(out.missing, ['Beta SAS']);
+});
+
+test('--coverage without any registry or history is an empty baseline, not an error', () => {
+  const root = sandbox({ withHistory: false });
+  const r = radar(root, ['--coverage']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).recall_all, null);
+});
+
+test('--coverage --summary prints both recall figures in words', () => {
+  const root = sandbox();
+  const r = radar(root, ['--coverage', '--summary']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /recall/i);
+  assert.match(r.stdout, /registers/i);
 });
