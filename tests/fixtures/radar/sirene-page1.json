@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "siren": "111111111",
+      "nom_complet": "ACME LOGICIEL SAS",
+      "nom_raison_sociale": "ACME LOGICIEL",
+      "activite_principale": "62.01Z",
+      "nature_juridique": "5710",
+      "tranche_effectif_salarie": "12",
+      "etat_administratif": "A",
+      "dirigeants": [{ "denomination": "Jean Dupont", "qualite": "Président de SAS", "type_dirigeant": "personne physique" }],
+      "siege": { "code_postal": "75001", "libelle_commune": "PARIS" },
+      "matching_etablissements": [{ "siret": "11111111100011", "code_postal": "68000", "libelle_commune": "COLMAR" }]
+    },
+    {
+      "siren": "222222222",
+      "nom_complet": "MARTIN JEAN",
+      "nom_raison_sociale": null,
+      "activite_principale": "43.22A",
+      "nature_juridique": "1000",
+      "tranche_effectif_salarie": "02",
+      "etat_administratif": "A",
+      "dirigeants": [],
+      "matching_etablissements": [{ "siret": "22222222200022", "code_postal": "68000", "libelle_commune": "COLMAR" }]
+    }
+  ],
+  "total_results": 3,
+  "page": 1,
+  "per_page": 25,
+  "total_pages": 2
+}
