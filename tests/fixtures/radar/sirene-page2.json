@@ -1,0 +1,19 @@
+{
+  "results": [
+    {
+      "siren": "333333333",
+      "nom_complet": "BOULANGERIE SOLEIL",
+      "nom_raison_sociale": "BOULANGERIE SOLEIL",
+      "activite_principale": "10.71C",
+      "nature_juridique": "5499",
+      "tranche_effectif_salarie": "NN",
+      "etat_administratif": "A",
+      "dirigeants": [],
+      "matching_etablissements": [{ "siret": "33333333300033", "code_postal": "68000", "libelle_commune": "COLMAR" }]
+    }
+  ],
+  "total_results": 3,
+  "page": 2,
+  "per_page": 25,
+  "total_pages": 2
+}
