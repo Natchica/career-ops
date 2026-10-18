@@ -299,11 +299,12 @@ function FirstRun() {
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted">
         The radar lists every employer with a site in your commute zones A to D, from four kinds of source. It only names
-        companies. Nothing is evaluated, filtered or contacted. Start with a preview, which writes nothing:
+        companies. Nothing is evaluated, filtered or contacted. Press Preview on a source above, which writes nothing,
+        then Save once you like what you see. Prefer a terminal? The same preview is:
       </p>
       <CopyableCommand command="node radar.mjs --source ats-employers --summary" className="mt-4 max-w-xl" />
       <p className="mt-3 text-sm text-muted">
-        Then add <code className="text-foreground">--write</code> to save it and reload this page.
+        Add <code className="text-foreground">--write</code> to save it, then reload this page.
       </p>
       <ul className="mt-5 grid gap-3 sm:grid-cols-2">
         {families.map((f) => (
