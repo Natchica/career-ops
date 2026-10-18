@@ -115,10 +115,12 @@ export default {
     }
 
     const postcodes = ctx.postcodes ?? zonePostcodes(ctx.table, ctx.zones ?? null);
-    for (const cp of postcodes) {
+    for (const [index, cp] of postcodes.entries()) {
+      const progress = () => ctx.log?.(`sirene: ${cp} done (${index + 1}/${postcodes.length})`);
       const cached = ctx.cache?.get(cp);
       if (cached) {
         yield* cached;
+        progress();
         continue;
       }
       const records = [];
@@ -127,6 +129,7 @@ export default {
         yield record;
       }
       ctx.cache?.set(cp, records);
+      progress();
     }
   },
 };
