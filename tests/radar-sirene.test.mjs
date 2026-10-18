@@ -149,3 +149,12 @@ test('a failing request surfaces as an error and not as an empty census', async 
   ctx.postcodes = ['68000'];
   await assert.rejects(collect(ctx), /HTTP 500/);
 });
+
+test('progress is logged once per postcode with its position', async () => {
+  const lines = [];
+  const { ctx } = fakeCtx(pageHandler);
+  ctx.postcodes = ['68000', '68100'];
+  ctx.log = (line) => lines.push(line);
+  await collect(ctx);
+  assert.deepEqual(lines, ['sirene: 68000 done (1/2)', 'sirene: 68100 done (2/2)']);
+});
