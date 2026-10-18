@@ -193,3 +193,16 @@ test('a failing request surfaces as an error and not as an empty census', async 
   const { ctx } = fakeCtx(() => { throw Object.assign(new Error('HTTP 500'), { status: 500 }); });
   await assert.rejects(collect(ctx), /HTTP 500/);
 });
+
+test('companies in liquidation are skipped and counted', async () => {
+  const rows = [
+    row(),
+    row({ name: { value: 'Swiss Corporate Health Systems GmbH in Liquidation' }, uid: { value: 'https://x/UID/CHE444444444' } }),
+    row({ name: { value: 'Exemple SA en liquidation' }, uid: { value: 'https://x/UID/CHE555555555' } }),
+    row({ name: { value: 'Esempio SA in liquidazione' }, uid: { value: 'https://x/UID/CHE666666666' } }),
+  ];
+  const { ctx, logs } = fakeCtx(() => rows);
+  const records = await collect(ctx);
+  assert.deepEqual(records.map((r) => r.name), ['Acme Software AG']);
+  assert.ok(logs.some((m) => /3 .*liquidation/i.test(m)));
+});
