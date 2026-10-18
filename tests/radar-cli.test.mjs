@@ -138,3 +138,29 @@ test('every source in radar/sources is listed as known when an unknown one is as
   assert.match(unknown.stderr, /ats-employers/);
   assert.match(unknown.stderr, /sirene/);
 });
+
+test('--sources lists every source with its auth state and last save', () => {
+  const root = sandbox();
+  const before = JSON.parse(radar(root, ['--sources']).stdout);
+  const ats = before.find((s) => s.id === 'ats-employers');
+  assert.deepEqual(
+    { family: ats.family, auth: ats.auth, vars: ats.vars, lastSaved: ats.lastSaved },
+    { family: 'ats', auth: 'ready', vars: [], lastSaved: null },
+  );
+  assert.ok(before.some((s) => s.id === 'sirene' && s.family === 'register'));
+  radar(root, ['--source', 'ats-employers', '--write']);
+  const after = JSON.parse(radar(root, ['--sources']).stdout);
+  assert.match(after.find((s) => s.id === 'ats-employers').lastSaved, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(after.find((s) => s.id === 'sirene').lastSaved, null);
+});
+
+test('--sources never prints a credential value', () => {
+  const root = sandbox();
+  const r = spawnSync(process.execPath, [join(ROOT, 'radar.mjs'), '--sources'], {
+    cwd: root, encoding: 'utf-8',
+    env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', CAREER_OPS_PORTALS: '', ZEFIX_PASSWORD: 'SECRET_SENTINEL_42', GITHUB_PERSONAL_ACCESS_TOKEN: 'SECRET_SENTINEL_42' },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.includes('SECRET_SENTINEL_42'), false);
+  assert.equal(r.stderr.includes('SECRET_SENTINEL_42'), false);
+});
