@@ -1,18 +1,24 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRunTokens, planPreview, planSave } from '../web/src/lib/radar-run.mjs';
-import { earnsToken, parseReceipt } from '../web/src/lib/radar-stream.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // The Radar page builds its argv in web/src/lib/radar-run.mjs and reads the
 // answer through web/src/lib/radar-stream.mjs. This is the link between those
 // and the real radar.mjs: the argv the page would spawn is put to the script.
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+
+// web/ is not part of a core-only install, so it is loaded at runtime and these
+// tests skip when it is absent.
+const WEB_LIB = join(ROOT, 'web', 'src', 'lib');
+const hasWeb = existsSync(join(WEB_LIB, 'radar-run.mjs'));
+const { createRunTokens, planPreview, planSave } = hasWeb ? await import(pathToFileURL(join(WEB_LIB, 'radar-run.mjs')).href) : {};
+const { earnsToken, parseReceipt } = hasWeb ? await import(pathToFileURL(join(WEB_LIB, 'radar-stream.mjs')).href) : {};
+const web = (name, fn) => test(name, { skip: hasWeb ? false : 'web/ is not present in this checkout' }, fn);
 const sandboxes = [];
 after(() => { for (const d of sandboxes) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
@@ -30,7 +36,7 @@ const run = (root, argv) =>
   });
 const KNOWN = ['ats-employers', 'sirene'];
 
-test('the preview argv the page builds runs and its receipt earns a save token', () => {
+web('the preview argv the page builds runs and its receipt earns a save token', () => {
   const root = sandbox();
   const plan = planPreview({ source: 'ats-employers' }, KNOWN);
   const r = run(root, plan.argv);
@@ -41,14 +47,14 @@ test('the preview argv the page builds runs and its receipt earns a save token',
   assert.equal(earnsToken(receipt, 'ats-employers'), true);
 });
 
-test('the preview argv with zones is accepted and filters', () => {
+web('the preview argv with zones is accepted and filters', () => {
   const root = sandbox();
   const plan = planPreview({ source: 'ats-employers', zones: ['C'] }, KNOWN);
   const receipt = parseReceipt(run(root, plan.argv).stdout);
   assert.equal(receipt.prospects.new, 1);
 });
 
-test('the save argv the page builds is accepted by the script and writes the registry', () => {
+web('the save argv the page builds is accepted by the script and writes the registry', () => {
   const root = sandbox();
   const tokens = createRunTokens();
   const params = { source: 'ats-employers', zones: [] };
@@ -62,7 +68,7 @@ test('the save argv the page builds is accepted by the script and writes the reg
   assert.equal(receipt.prospects.total, 2);
 });
 
-test('every flag in a save argv with zones is one the script accepts', () => {
+web('every flag in a save argv with zones is one the script accepts', () => {
   const tokens = createRunTokens();
   const params = { source: 'sirene', zones: ['A', 'C'] };
   const plan = planSave({ ...params, token: tokens.issue(params) }, KNOWN, tokens);
