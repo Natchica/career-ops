@@ -17,6 +17,11 @@ const TTL_MS = 30 * 60 * 1000;
 const MAX_TOKENS = 20;
 const TOKEN_SHAPE = /^[0-9a-f]{32}$/;
 
+/** @typedef {{source: string, zones: string[]}} RunParams */
+/** @typedef {{ok: false, status: number, error: string}} Refusal */
+/** @typedef {{ok: true, params: RunParams, argv: string[]}} Plan */
+
+/** @returns {Refusal} */
 const refuse = (status, error) => ({ ok: false, status, error });
 
 /**
@@ -25,6 +30,7 @@ const refuse = (status, error) => ({ ok: false, status, error });
  *
  * @param {unknown} body
  * @param {string[]} knownSourceIds ids reported by `radar.mjs --sources`
+ * @returns {{ok: true, params: RunParams} | Refusal}
  */
 function parseParams(body, knownSourceIds) {
   if (!body || typeof body !== "object") return refuse(400, "Expected a JSON object.");
@@ -48,7 +54,12 @@ function buildArgs(params, { write }) {
   return argv;
 }
 
-/** Plan a preview run. The result never carries --write. */
+/**
+ * Plan a preview run. The result never carries --write.
+ * @param {unknown} body
+ * @param {string[]} knownSourceIds
+ * @returns {Plan | Refusal}
+ */
 export function planPreview(body, knownSourceIds) {
   const parsed = parseParams(body, knownSourceIds);
   if (!parsed.ok) return parsed;
@@ -89,7 +100,13 @@ export function sharedRunTokens() {
   return g.__radarRunTokens;
 }
 
-/** Plan a save. It exists only when a valid token for the same source and zones is presented. */
+/**
+ * Plan a save. It exists only when a valid token for the same source and zones is presented.
+ * @param {unknown} body
+ * @param {string[]} knownSourceIds
+ * @param {{consume: (token: unknown, params: RunParams) => boolean}} tokens
+ * @returns {Plan | Refusal}
+ */
 export function planSave(body, knownSourceIds, tokens) {
   const parsed = parseParams(body, knownSourceIds);
   if (!parsed.ok) return parsed;
