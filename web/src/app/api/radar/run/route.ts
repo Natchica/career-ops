@@ -24,6 +24,9 @@ export async function POST(req: Request) {
   if (!plan.ok) return Response.json({ error: plan.error }, { status: plan.status });
 
   const source = sources.find((s) => s.id === plan.params.source);
+  if (source?.auth === "not-built") {
+    return Response.json({ error: `This source is not available: ${source.reason ?? "no vetted site"}.` }, { status: 400 });
+  }
   if (source?.auth === "missing-credentials") {
     return Response.json({ error: `Missing credentials: set ${source.vars.join(", ")} first.` }, { status: 400 });
   }
