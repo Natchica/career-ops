@@ -1,0 +1,126 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseRegistry } from '../radar/registry.mjs';
+
+const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const FIXTURE = join(ROOT, 'tests', 'fixtures', 'radar', 'scan-history.tsv');
+const sandboxes = [];
+
+function sandbox({ withHistory = true } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'radar-cli-'));
+  sandboxes.push(dir);
+  mkdirSync(join(dir, 'data'), { recursive: true });
+  if (withHistory) copyFileSync(FIXTURE, join(dir, 'data', 'scan-history.tsv'));
+  return dir;
+}
+after(() => { for (const d of sandboxes) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
+
+function radar(root, args) {
+  const r = spawnSync(process.execPath, [join(ROOT, 'radar.mjs'), ...args], {
+    cwd: root,
+    encoding: 'utf-8',
+    timeout: 60_000,
+    env: {
+      ...process.env,
+      CAREER_OPS_ROOT: root,
+      CAREER_OPS_DATA_DIR: '',
+      CAREER_OPS_PORTALS: '',
+      CAREER_OPS_SCAN_HISTORY: '',
+    },
+  });
+  assert.equal(r.error, undefined, r.error?.message);
+  return r;
+}
+const receipt = (r) => JSON.parse(r.stdout);
+const registryFile = (root) => join(root, 'data', 'radar.tsv');
+const readRows = (root) => parseRegistry(readFileSync(registryFile(root), 'utf-8')).rows;
+
+test('a preview reports what it would add and writes nothing', () => {
+  const root = sandbox();
+  const r = radar(root, ['--source', 'ats-employers']);
+  assert.equal(r.status, 0, r.stderr);
+  const out = receipt(r);
+  assert.equal(out.mode, 'preview');
+  assert.equal(out.written, false);
+  assert.deepEqual(out.prospects, { new: 2, known: 0, total: 2 });
+  assert.deepEqual(out.sources[0], { id: 'ats-employers', status: 'ok', reason: null, raw: 5, zoned: 3, unzoned: 2 });
+  assert.equal(existsSync(registryFile(root)), false);
+});
+
+test('--write persists the registry', () => {
+  const root = sandbox();
+  const r = radar(root, ['--source', 'ats-employers', '--write']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(receipt(r).written, true);
+  const rows = readRows(root);
+  assert.deepEqual(rows.map((row) => row.key).sort(), ['acme', 'beta']);
+  const acme = rows.find((row) => row.key === 'acme');
+  assert.equal(acme.sites, 'Basel:B;Zurich:C');
+  assert.equal(acme.signals, '1');
+  assert.equal(acme.portals_ref, '—');
+});
+
+test('a second --write adds nothing and keeps first_seen', () => {
+  const root = sandbox();
+  radar(root, ['--source', 'ats-employers', '--write']);
+  const before = readRows(root).map((row) => row.first_seen);
+  const again = receipt(radar(root, ['--source', 'ats-employers', '--write']));
+  assert.equal(again.prospects.new, 0);
+  assert.equal(again.prospects.known, 2);
+  assert.deepEqual(readRows(root).map((row) => row.first_seen), before);
+});
+
+test('--zone keeps only the sites in the chosen zones', () => {
+  const root = sandbox();
+  const out = receipt(radar(root, ['--source', 'ats-employers', '--zone', 'C']));
+  assert.deepEqual(out.prospects, { new: 1, known: 0, total: 1 });
+});
+
+test('--since reports prospects first seen on or after the date', () => {
+  const root = sandbox();
+  radar(root, ['--source', 'ats-employers', '--write']);
+  const none = receipt(radar(root, ['--source', 'ats-employers', '--since', '2999-01-01']));
+  assert.deepEqual(none.since, { date: '2999-01-01', count: 0 });
+  const all = receipt(radar(root, ['--source', 'ats-employers', '--since', '2000-01-01']));
+  assert.equal(all.since.count, 2);
+});
+
+test('an unknown source or a bad flag value exits 1 with a message', () => {
+  const root = sandbox();
+  const unknown = radar(root, ['--source', 'nope']);
+  assert.equal(unknown.status, 1);
+  assert.match(unknown.stderr, /unknown source "nope"/);
+  assert.equal(radar(root, ['--zone', 'Z']).status, 1);
+  assert.equal(radar(root, ['--since', 'yesterday']).status, 1);
+  assert.equal(radar(root, ['--bogus']).status, 1);
+});
+
+test('a failing source is reported and does not abort the run', () => {
+  const root = sandbox({ withHistory: false });
+  const r = radar(root, ['--source', 'ats-employers']);
+  assert.equal(r.status, 1);
+  const out = receipt(r);
+  assert.equal(out.sources[0].status, 'failed');
+  assert.match(out.sources[0].reason, /scan-history\.tsv/);
+  assert.equal(out.written, false);
+});
+
+test('--help prints usage', () => {
+  const r = radar(sandbox(), ['--help']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^Usage:/m);
+});
+
+test('a malformed registry is an error, never an empty default', () => {
+  const root = sandbox();
+  writeFileSync(registryFile(root), 'name\nAcme\n');
+  const r = radar(root, ['--source', 'ats-employers', '--write']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /radar\.tsv/);
+  assert.equal(readFileSync(registryFile(root), 'utf-8'), 'name\nAcme\n');
+});
