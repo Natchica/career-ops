@@ -1,0 +1,8 @@
+url	first_seen	portal	title	company	status	location
+https://x.test/1	2026-10-01	greenhouse-api	Rust Engineer	Acme AG	added	Basel, Switzerland
+https://x.test/2	2026-10-02	lever-full	Dev	Acme AG	skipped	Zurich, Switzerland
+https://x.test/3	2026-10-03	linkedin-search	Dev	Beta SAS	added	STRASBOURG (67)
+https://x.test/4	2026-10-04	ashby-api	Dev	Gamma GmbH	added	Remote
+https://x.test/5	2026-10-05	greenhouse-api	Dev		added	Basel
+https://x.test/6	2026-10-06	greenhouse-api	Dev	Delta	added	
+https://x.test/7	2026-10-07	greenhouse-api	Dev	acme ag	added	Basel, Switzerland
