@@ -124,3 +124,17 @@ test('a malformed registry is an error, never an empty default', () => {
   assert.match(r.stderr, /radar\.tsv/);
   assert.equal(readFileSync(registryFile(root), 'utf-8'), 'name\nAcme\n');
 });
+
+test('--resume is accepted and documented', () => {
+  const root = sandbox();
+  assert.match(radar(root, ['--help']).stdout, /--resume/);
+  const r = radar(root, ['--source', 'ats-employers', '--resume']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(receipt(r).mode, 'preview');
+});
+
+test('every source in radar/sources is listed as known when an unknown one is asked for', () => {
+  const unknown = radar(sandbox(), ['--source', 'nope']);
+  assert.match(unknown.stderr, /ats-employers/);
+  assert.match(unknown.stderr, /sirene/);
+});
