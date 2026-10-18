@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpDown, ChevronLeft, ChevronRight, CircleAlert, Search, Sparkles, Telescope } from "lucide-react";
 import { CopyableCommand } from "@/components/copyable-command";
 import { cn } from "@/lib/cn";
@@ -17,7 +17,7 @@ const SORT_LABEL: Record<string, string> = { name: "Company", zone: "Zone", size
 const inputClass =
   "rounded-full border border-border bg-surface px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50";
 
-export function RadarView({ initial }: { initial: RadarResult }) {
+export function RadarView({ initial, coverage }: { initial: RadarResult; coverage?: ReactNode }) {
   const [data, setData] = useState<RadarResult>(initial);
   const [query, setQuery] = useState<Query | null>(initial.state === "ok" ? initial.query : null);
   const [text, setText] = useState(initial.state === "ok" ? initial.query.q : "");
@@ -120,6 +120,8 @@ export function RadarView({ initial }: { initial: RadarResult }) {
           <p className="mt-1 text-xs text-muted">in the latest run{summary.latestRun ? ` (${summary.latestRun})` : ""}</p>
         </button>
       </div>
+
+      {coverage}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <label className="relative">
