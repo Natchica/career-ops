@@ -153,6 +153,15 @@ const CALL_SITES = [
     probe: 'run',
   },
   {
+    source: 'web/src/lib/core/radar-run.ts',
+    script: 'radar.mjs',
+    // The sources listing the radar routes read before planning a run. The
+    // preview and save argv are built at runtime by web/src/lib/radar-run.mjs
+    // and are put to the real script in tests/radar-web-argv.test.mjs.
+    args: ['--sources'],
+    probe: 'run',
+  },
+  {
     source: 'web/src/lib/core/pipeline.ts',
     script: null,
     args: [],
