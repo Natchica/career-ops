@@ -288,7 +288,7 @@ function ErrorPanel({ message }: { message: string }) {
 
 function FirstRun() {
   const families = [
-    { name: "Company registers", text: "Every French employer by postcode, from the public SIRENE register." },
+    { name: "Company registers", text: "French employers by postcode (SIRENE), and Swiss firms whose registered purpose is software (Zefix)." },
     { name: "Job-board and ATS mining", text: "Employers your scanners already met, with hiring-board evidence." },
     { name: "Startup directories", text: "Regional startup and cluster lists, where their terms allow it." },
     { name: "GitHub organisations", text: "Engineering-heavy firms that list a place in a zone." },
