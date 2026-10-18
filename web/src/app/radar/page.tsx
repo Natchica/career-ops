@@ -1,4 +1,5 @@
 import { Telescope } from "lucide-react";
+import { RadarCoverage } from "@/components/radar-coverage";
 import { RadarSources } from "@/components/radar-sources";
 import { RadarView } from "@/components/radar-view";
 import { loadRadar } from "@/lib/core/radar";
@@ -32,7 +33,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         <RadarSources defaultOpen={initial.state !== "ok" || initial.summary.total === 0} />
       </div>
       <div className="mt-6">
-        <RadarView initial={initial} />
+        <RadarView initial={initial} coverage={<RadarCoverage />} />
       </div>
     </div>
   );
