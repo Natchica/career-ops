@@ -12,7 +12,8 @@ import { parseReceipt, progressMessage } from "@/lib/radar-stream.mjs";
 export type SourceInfo = {
   id: string;
   family: string;
-  auth: "ready" | "missing-credentials";
+  auth: "ready" | "missing-credentials" | "not-built";
+  reason: string | null;
   vars: string[];
   lastSaved: string | null;
 };
