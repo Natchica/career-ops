@@ -21,6 +21,8 @@ import { localToday } from './lib/local-today.mjs';
 import { loadZoneTable, zoneRecord } from './radar/zones.mjs';
 import { baseKey, mergeRecords } from './radar/identity.mjs';
 import { RADAR_COLUMNS, readRegistry, registryPath, writeRegistry } from './radar/registry.mjs';
+import { makeRawCache } from './radar/cache.mjs';
+import { makeHttpCtx } from './providers/_http.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -34,13 +36,14 @@ Options:
   --source <id|all>  Source to run (default: all). Ids come from radar/sources/
   --zone <A,B,C,D>   Keep only sites in these zones
   --write            Persist the registry (data/radar.tsv)
+  --resume           Reuse sweeps stored in the last 24 hours (--write does too)
   --since <date>     Also report prospects first seen on or after YYYY-MM-DD
   --summary          Human-readable table instead of JSON
   --json             JSON receipt (the default)
   --help             This message
 `;
 
-const KNOWN_FLAGS = ['--source', '--zone', '--write', '--since', '--summary', '--json', '--help', '-h'];
+const KNOWN_FLAGS = ['--source', '--zone', '--write', '--resume', '--since', '--summary', '--json', '--help', '-h'];
 const VALUE_FLAGS = ['--source', '--zone', '--since'];
 
 function fail(message) {
@@ -93,6 +96,7 @@ async function main(args) {
   const zoneArg = flagValue(args, '--zone');
   const sinceArg = flagValue(args, '--since');
   const write = hasFlag(args, '--write');
+  const useCache = write || hasFlag(args, '--resume');
 
   let zones = null;
   if (zoneArg !== undefined) {
@@ -118,8 +122,9 @@ async function main(args) {
     if (entry && typeof entry.name === 'string') portalsNames.set(baseKey(canon(entry.name)), entry.name);
   }
 
-  const ctx = {
-    table, env: process.env, today, dataRoot: root, codeRoot: CODE_ROOT,
+  const baseCtx = {
+    table, zones, env: process.env, today, dataRoot: root, codeRoot: CODE_ROOT,
+    http: makeHttpCtx(),
     log: (message) => process.stderr.write(`${message}\n`),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };
@@ -135,6 +140,7 @@ async function main(args) {
       continue;
     }
     const fromSource = [];
+    const ctx = { ...baseCtx, cache: makeRawCache({ root, sourceId: source.id, useCache }) };
     try {
       for await (const raw of source.fetch(ctx)) {
         receipt.raw++;
