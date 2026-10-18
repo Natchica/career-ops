@@ -35,6 +35,7 @@ and does nothing else with them. Preview by default: nothing is written unless
 Options:
   --source <id|all>  Source to run (default: all). Ids come from radar/sources/
   --zone <A,B,C,D>   Keep only sites in these zones
+  --sources          List the sources with their auth state and last save (JSON)
   --write            Persist the registry (data/radar.tsv)
   --resume           Reuse sweeps stored in the last 24 hours (--write does too)
   --since <date>     Also report prospects first seen on or after YYYY-MM-DD
@@ -43,7 +44,7 @@ Options:
   --help             This message
 `;
 
-const KNOWN_FLAGS = ['--source', '--zone', '--write', '--resume', '--since', '--summary', '--json', '--help', '-h'];
+const KNOWN_FLAGS = ['--source', '--zone', '--write', '--resume', '--sources', '--since', '--summary', '--json', '--help', '-h'];
 const VALUE_FLAGS = ['--source', '--zone', '--since'];
 
 function fail(message) {
@@ -66,6 +67,23 @@ function authState(source, env) {
   if (source.auth?.kind !== 'env') return { ready: true };
   const missing = (source.auth.vars ?? []).filter((v) => !env[v]);
   return missing.length ? { ready: false, reason: `missing credentials: ${missing.join(', ')}` } : { ready: true };
+}
+
+/**
+ * Every source with its auth state and the latest date it named a Prospect.
+ * Reports which variables a source needs, never their values.
+ */
+function describeSources(sources, rows, env) {
+  return sources.map((source) => {
+    const seen = rows.filter((r) => String(r.sources ?? '').split(';').includes(source.id)).map((r) => r.last_seen).filter(Boolean);
+    return {
+      id: source.id,
+      family: source.family,
+      auth: authState(source, env).ready ? 'ready' : 'missing-credentials',
+      vars: source.auth?.vars ?? [],
+      lastSaved: seen.length ? seen.sort().at(-1) : null,
+    };
+  });
 }
 
 function loadPortals(root) {
@@ -106,6 +124,11 @@ async function main(args) {
   if (sinceArg !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(sinceArg)) fail(`--since takes YYYY-MM-DD, got "${sinceArg}"`);
 
   const all = await loadSources();
+  if (hasFlag(args, '--sources')) {
+    const registry = readRegistry(registryPath(getCareerOpsRoot()));
+    console.log(JSON.stringify(describeSources(all, registry.rows, process.env), null, 2));
+    return;
+  }
   const selected = sourceArg === 'all' ? all : all.filter((s) => s.id === sourceArg);
   if (selected.length === 0) fail(`unknown source "${sourceArg}". Known: ${all.map((s) => s.id).join(', ')}`);
 
