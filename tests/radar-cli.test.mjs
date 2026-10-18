@@ -164,3 +164,21 @@ test('--sources never prints a credential value', () => {
   assert.equal(r.stdout.includes('SECRET_SENTINEL_42'), false);
   assert.equal(r.stderr.includes('SECRET_SENTINEL_42'), false);
 });
+
+test('a source with no vetted site is reported as skipped with its reason', () => {
+  const root = sandbox();
+  const r = radar(root, ['--source', 'directories']);
+  const out = receipt(r);
+  assert.equal(out.sources[0].status, 'skipped');
+  assert.match(out.sources[0].reason, /no vetted site/);
+  assert.equal(out.written, false);
+});
+
+test('--sources marks a source with no vetted site as not built and says why', () => {
+  const root = sandbox();
+  const list = JSON.parse(radar(root, ['--sources']).stdout);
+  const dirs = list.find((s) => s.id === 'directories');
+  assert.equal(dirs.auth, 'not-built');
+  assert.match(dirs.reason, /no vetted site/);
+  assert.equal(list.find((s) => s.id === 'sirene').reason, null);
+});
