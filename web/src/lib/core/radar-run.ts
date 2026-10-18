@@ -42,6 +42,24 @@ export async function listSources(): Promise<SourceInfo[]> {
   return JSON.parse(stdout) as SourceInfo[];
 }
 
+export type CoverageReport = {
+  baseline: { size: number; unzoned: number; unzoned_names: string[] };
+  found: number;
+  recall_all: number | null;
+  recall_excluding_ats_employers: number | null;
+  missing: string[];
+  missing_total: number;
+  missing_excluding_ats_employers: string[];
+  missing_excluding_ats_employers_total: number;
+};
+
+/** Recall against the companies already known to be in a zone, from `radar.mjs --coverage`. */
+export async function getCoverage(): Promise<CoverageReport> {
+  const { code, stdout, stderr } = await runToCompletion(["--coverage"]);
+  if (code !== 0) throw new Error(stderr.trim() || "radar.mjs --coverage failed");
+  return JSON.parse(stdout) as CoverageReport;
+}
+
 type Extra = (receipt: Record<string, unknown>) => Record<string, unknown>;
 
 /**
