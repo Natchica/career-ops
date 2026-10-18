@@ -107,3 +107,22 @@ test('a portals.yml entry fills portals_ref only while it is empty', () => {
   rows[0].portals_ref = 'Hand Set';
   assert.equal(merge(rows, [rec()], { portalsNames }).rows[0].portals_ref, 'Hand Set');
 });
+
+test('a record can carry signal tokens, and the Zefix software marker counts as the software signal', () => {
+  const { rows } = merge([], [rec({ sourceId: 'zefix', country: 'CH', sector: 'zefix-purpose:software', signalTokens: ['zefix:software'], sites: [{ place: 'Basel', zone: 'B', country: 'CH' }] })]);
+  assert.equal(rows[0].sources, 'zefix;zefix:software');
+  assert.equal(rows[0].signals, '1');
+  assert.equal(countSignals({ sources: 'zefix;zefix:software', sector: '' }), 1);
+});
+
+test('a NAF software code and the Zefix marker are one software signal, not two', () => {
+  assert.equal(countSignals({ sources: 'sirene;zefix:software', sector: '62.01Z' }), 1);
+  assert.equal(countSignals({ sources: 'ats-employers:board;github-orgs;directories;zefix:software', sector: '62.01Z' }), 4);
+});
+
+test('signal tokens are not duplicated when a company is seen again', () => {
+  const r = rec({ sourceId: 'zefix', signalTokens: ['zefix:software'] });
+  const once = merge([], [r]).rows;
+  const twice = merge(once, [r]).rows;
+  assert.equal(twice[0].sources, 'zefix;zefix:software');
+});
