@@ -304,7 +304,7 @@ The offline half — *which enabled entries does no provider claim?* — is pure
 
 Census of the employers with a site in commute zones A to D. It names companies and does nothing else with them: no evaluation, screening, scoring or contact, and it never writes `portals.yml`, `data/pipeline.md` or the tracker. Each employer becomes one Prospect (one brand or group, in-zone sites listed) in `data/radar.tsv`. Zone E and remote are out. The Radar is local only. Full detail: `modes/radar.md`.
 
-Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `github-orgs` (organisations only, token optional), and `directories` (documents the vetted candidates and enables none). Preview is the default; nothing is written without `--write`.
+Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `zefix` (Swiss firms whose registered purpose is software, from the open-data copy on LINDAS under its fair-use rules), `github-orgs` (organisations only, token optional), and `directories` (documents the vetted candidates and enables none). Preview is the default; nothing is written without `--write`.
 
 ```bash
 node radar.mjs --sources                          # sources with auth state and last save (JSON)
