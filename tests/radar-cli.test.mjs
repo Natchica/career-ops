@@ -148,6 +148,7 @@ test('--sources lists every source with its auth state and last save', () => {
     { family: 'ats', auth: 'ready', vars: [], lastSaved: null },
   );
   assert.ok(before.some((s) => s.id === 'sirene' && s.family === 'register'));
+  assert.ok(before.some((s) => s.id === 'zefix' && s.family === 'register' && s.auth === 'ready'));
   radar(root, ['--source', 'ats-employers', '--write']);
   const after = JSON.parse(radar(root, ['--sources']).stdout);
   assert.match(after.find((s) => s.id === 'ats-employers').lastSaved, /^\d{4}-\d{2}-\d{2}$/);
