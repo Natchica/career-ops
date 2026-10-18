@@ -101,14 +101,17 @@ test('50k rows parse, group and serialize in under 3 seconds', () => {
   const records = Array.from({ length: 50_000 }, (_, i) => ({
     name: `Company ${i} SAS`, country: 'FR', sites: [{ place: 'Colmar', zone: 'A', country: 'FR' }], sourceId: 'sirene',
   }));
-  const started = Date.now();
+  // CPU time, not wall time: the full suite runs in parallel, and contention
+  // multiplies wall time several-fold while the work itself stays the same.
+  const started = process.cpuUsage();
   const first = mergeRecords([], records, { canon, today: '2026-10-18', portalsNames: new Map() });
   const text = serializeRegistry({ columns: RADAR_COLUMNS, rows: first.rows });
   const parsed = parseRegistry(text);
   const second = mergeRecords(parsed.rows, records, { canon, today: '2026-10-19', portalsNames: new Map() });
-  const ms = Date.now() - started;
-  console.log(`radar 50k round: ${ms} ms`);
+  const used = process.cpuUsage(started);
+  const ms = Math.round((used.user + used.system) / 1000);
+  console.log(`radar 50k round: ${ms} ms cpu`);
   assert.equal(second.newKeys.length, 0);
   assert.equal(second.rows.length, 50_000);
-  assert.ok(ms < 3000, `took ${ms} ms`);
+  assert.ok(ms < 3000, `took ${ms} ms of cpu`);
 });
