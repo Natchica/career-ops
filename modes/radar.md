@@ -35,7 +35,7 @@ Preview is the default. `--write` and `--resume` reuse sweeps stored in the last
 | `sirene` | Company register (France) | none | Built. Active units with salaried employees, per postcode of the zone table. Sole proprietors are skipped |
 | `github-orgs` | GitHub organisations | optional `GITHUB_PERSONAL_ACCESS_TOKEN` | Built. Organisations only, never users or emails |
 | `directories` | Startup and cluster directories | none | Nothing enabled: no candidate offers a company list a crawler may read |
-| `zefix` | Company register (Switzerland) | free account | Not built, see below |
+| `zefix` | Company register (Switzerland) | none | Built. Swiss firms whose registered purpose says they build software or sell IT services, read from the open-data copy on LINDAS. See below |
 
 Germany has no register source: Freiburg and Lörrach rely on the other families. The Handelsregister portal restricts automated access.
 
@@ -45,11 +45,21 @@ A source ships only after its `robots.txt` and terms were read and a company lis
 
 - **SIRENE** (`recherche-entreprises.api.gouv.fr`): no `robots.txt`, no key, open data under Licence Ouverte 2.0, documented at 7 calls per second. The Radar paces at 3. Attribution: Source : base SIRENE de l'INSEE, via recherche-entreprises.api.gouv.fr. The `dirigeants` field (personal data) is never read.
 - **GitHub** (`api.github.com`): no `robots.txt`. The Acceptable Use Policies forbid spam and selling personal information to recruiters. The Radar reads public organisation profiles only and keeps them on this machine. Without a token it searches at 10 per minute and skips names shared with a place outside the zones; with one it reads each organisation's own location at 30 per minute.
+- **Zefix on LINDAS** (`lindas.admin.ch/query`): see the Zefix section below. Vetted from the Federal Office of Justice's Zefix page (9 February 2026), the LINDAS query page and its fair-use guidance, and the dataset registration.
 - **Directories**: BaselArea.swiss, Alsace Digitale, FWTM Freiburg and WSW Lörrach publish no company list. BioValley France timed out on both its sitemap and `robots.txt`, so it was not read. The table is in `radar/sources/directories.mjs`.
 
 ### Zefix
 
-Zefix: not built (robots.txt `Disallow: /` covers the API path; the API has no activity-code filter, needs a name of 3 or more characters and returns an unpaginated list of unknown cap). Whether to build it anyway is the candidate's decision, and none was given, so it stays unbuilt. If the answer is yes, the source is a `zefix` module under `radar/sources/` reading `ZEFIX_USER` and `ZEFIX_PASSWORD`, and a probe of the cap comes first.
+Zefix: user approved on 2026-10-18, as a Swiss software-purpose source and not as a census.
+
+Zefix holds name, legal form, seat, address and statutory purpose of every active Swiss legal entity. It has no activity code and no employee count, and a zone-wide census would add 150,000 or more entities that say nothing about who employs developers. So the source keeps only firms whose purpose text says they build software or sell IT services.
+
+- **Channel:** the open-data copy on LINDAS, the Federal Archives' linked-data service, which the Federal Office of Justice points to for bulk data. The Zefix REST API is for individual lookups only: the Office states that obtaining the whole database or parts of it is not offered through Zefix, so the Radar does not use it. The Zefix website and LINDAS both answer `Disallow: /` in `robots.txt`, but LINDAS publishes fair-use rules for automated queries and this source follows them.
+- **Fair use** ("How to Use LINDAS Efficiently and Responsibly", 2026-08-04): `LIMIT` and `OFFSET` with a stable `ORDER BY`, filters inside the query, only the variables needed, one request at a time at least 3 seconds apart, backoff on failure, an identifying User-Agent, results cached, no regular expressions on the server. IP addresses can be blocked for bursts. LINDAS says a dump may be available for heavy workloads.
+- **Grading:** the purpose is a statutory aim, not a record of what the firm does. A strong purpose (building software, IT services) becomes a record and earns the software signal. A weak mention (trading in hardware and software, holding shares) is counted in the log and dropped. The text is never stored.
+- **Skipped:** sole proprietorships, because their name is a person's, and firms in liquidation, which are not hiring.
+- **Limits:** no headcount, so a one-person GmbH looks like a company. Zug and Baar hold many holding and letterbox firms. Each zone's postcodes come from the zone table.
+- **Licence:** OGD, attribution required. Source: Zefix, Eidg. Amt fuer das Handelsregister, via LINDAS.
 
 ## The registry
 
