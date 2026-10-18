@@ -156,12 +156,37 @@ export function queryProspects(rows, query) {
 export function summarize(rows) {
   const byZone = { A: 0, B: 0, C: 0, D: 0 };
   const byCountry = {};
+  const bySource = {};
   let latestRun = null;
   for (const row of rows) {
     for (const z of new Set(rowZones(row))) if (z in byZone) byZone[z]++;
+    for (const src of split(row.sources)) if (!src.includes(":")) bySource[src] = (bySource[src] ?? 0) + 1;
     if (row.country) byCountry[row.country] = (byCountry[row.country] ?? 0) + 1;
     if (row.last_seen && (latestRun === null || row.last_seen > latestRun)) latestRun = row.last_seen;
   }
   const newInLatestRun = latestRun === null ? 0 : rows.filter((r) => r.first_seen === latestRun).length;
-  return { total: rows.length, byZone, byCountry, latestRun, newInLatestRun };
+  return { total: rows.length, byZone, byCountry, bySource, latestRun, newInLatestRun };
+}
+
+/**
+ * The query string for a query object, leaving out every default so URLs stay
+ * short and shareable. The inverse of {@link parseRadarQuery}.
+ *
+ * @param {Partial<ReturnType<typeof parseRadarQuery>>} query
+ */
+export function radarSearchString(query) {
+  const params = new URLSearchParams();
+  if (query.zones?.length) params.set("zones", query.zones.join(","));
+  if (query.country) params.set("country", query.country);
+  if (query.source) params.set("source", query.source);
+  if (query.sizeBand) params.set("sizeBand", query.sizeBand);
+  if (query.minSignals) params.set("minSignals", String(query.minSignals));
+  if (query.since) params.set("since", query.since);
+  if (query.q) params.set("q", query.q);
+  const sort = query.sort ?? "name";
+  if (sort !== "name") params.set("sort", sort);
+  if (query.dir && query.dir !== DEFAULT_DIR[sort]) params.set("dir", query.dir);
+  if (query.page && query.page > 1) params.set("page", String(query.page));
+  if (query.pageSize && query.pageSize !== PAGE_SIZE_DEFAULT) params.set("pageSize", String(query.pageSize));
+  return params.toString();
 }
