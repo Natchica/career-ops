@@ -70,7 +70,8 @@ function union(existing, additions) {
  * Independent tech signals for a row, 0 to 4: an ATS board, a GitHub org, a
  * directory listing, a software activity code. A count, never a filter.
  * Source tokens: `ats-employers:board` marks board evidence, as opposed to a
- * company merely seen in scan history.
+ * company merely seen in scan history, and `zefix:software` marks a Swiss firm
+ * whose registered purpose is building software.
  */
 export function countSignals(row) {
   const sources = splitList(row.sources);
@@ -79,7 +80,9 @@ export function countSignals(row) {
   if (sources.includes('ats-employers:board')) n++;
   if (sources.includes('github-orgs')) n++;
   if (sources.includes('directories')) n++;
-  if (SOFTWARE_NAF.has(code)) n++;
+  // One software signal, whichever register says it: a NAF code (France) or the
+  // Zefix purpose marker (Switzerland). A firm with both is not counted twice.
+  if (SOFTWARE_NAF.has(code) || sources.includes('zefix:software')) n++;
   return n;
 }
 
@@ -157,6 +160,7 @@ export function mergeRecords(rows, records, { canon, today, portalsNames }) {
 
     const sourceAdds = [record.sourceId];
     if (record.sourceId === 'ats-employers' && record.boardSignal) sourceAdds.push('ats-employers:board');
+    sourceAdds.push(...(record.signalTokens ?? []));
     row.sources = joinList(union(splitList(row.sources), sourceAdds));
     row.signals = String(countSignals(row));
     row.last_seen = today;
