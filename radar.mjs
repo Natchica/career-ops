@@ -64,6 +64,7 @@ async function loadSources() {
 }
 
 function authState(source, env) {
+  if (source.disabled) return { ready: false, reason: source.disabled, notBuilt: true };
   if (source.auth?.kind !== 'env') return { ready: true };
   const missing = (source.auth.vars ?? []).filter((v) => !env[v]);
   return missing.length ? { ready: false, reason: `missing credentials: ${missing.join(', ')}` } : { ready: true };
@@ -75,11 +76,13 @@ function authState(source, env) {
  */
 function describeSources(sources, rows, env) {
   return sources.map((source) => {
+    const state = authState(source, env);
     const seen = rows.filter((r) => String(r.sources ?? '').split(';').includes(source.id)).map((r) => r.last_seen).filter(Boolean);
     return {
       id: source.id,
       family: source.family,
-      auth: authState(source, env).ready ? 'ready' : 'missing-credentials',
+      auth: state.ready ? 'ready' : state.notBuilt ? 'not-built' : 'missing-credentials',
+      reason: state.ready || !state.notBuilt ? null : state.reason,
       vars: source.auth?.vars ?? [],
       lastSaved: seen.length ? seen.sort().at(-1) : null,
     };
