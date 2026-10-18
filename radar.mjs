@@ -22,6 +22,7 @@ import { loadZoneTable, zoneRecord } from './radar/zones.mjs';
 import { baseKey, mergeRecords } from './radar/identity.mjs';
 import { RADAR_COLUMNS, readRegistry, registryPath, writeRegistry } from './radar/registry.mjs';
 import { makeRawCache } from './radar/cache.mjs';
+import { computeCoverage } from './radar/coverage.mjs';
 import { makeHttpCtx } from './providers/_http.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,7 @@ Options:
   --source <id|all>  Source to run (default: all). Ids come from radar/sources/
   --zone <A,B,C,D>   Keep only sites in these zones
   --sources          List the sources with their auth state and last save (JSON)
+  --coverage         Recall against the companies already known to be in a zone
   --write            Persist the registry (data/radar.tsv)
   --resume           Reuse sweeps stored in the last 24 hours (--write does too)
   --since <date>     Also report prospects first seen on or after YYYY-MM-DD
@@ -44,7 +46,7 @@ Options:
   --help             This message
 `;
 
-const KNOWN_FLAGS = ['--source', '--zone', '--write', '--resume', '--sources', '--since', '--summary', '--json', '--help', '-h'];
+const KNOWN_FLAGS = ['--source', '--zone', '--write', '--resume', '--sources', '--coverage', '--since', '--summary', '--json', '--help', '-h'];
 const VALUE_FLAGS = ['--source', '--zone', '--since'];
 
 function fail(message) {
@@ -99,6 +101,30 @@ function loadPortals(root) {
   }
 }
 
+function renderCoverage(c) {
+  const pct = (n) => (n === null ? 'n/a (no baseline)' : `${(n * 100).toFixed(1)}%`);
+  const lines = [
+    `Radar coverage - baseline of ${c.baseline.size} companies known to be in zones A to D`,
+    `  recall, all sources:  ${pct(c.recall_all)} (${c.found} of ${c.baseline.size})`,
+    `  recall, registers and other sources only: ${pct(c.recall_excluding_ats_employers)}`,
+    `  not in the radar yet: ${c.missing_total}${c.missing.length ? ` (${c.missing.slice(0, 10).join(', ')}${c.missing_total > 10 ? ', ...' : ''})` : ''}`,
+  ];
+  if (c.baseline.unzoned) lines.push(`  tracked companies that cannot be placed in a zone: ${c.baseline.unzoned}`);
+  return lines.join('\n');
+}
+
+async function coverageReport(root, table, canon, portals) {
+  const source = (await loadSources()).find((s) => s.id === 'ats-employers');
+  const records = [];
+  try {
+    for await (const record of source.fetch({ env: process.env, dataRoot: root })) records.push(record);
+  } catch {
+    // No scan history yet: the baseline is simply empty.
+  }
+  const portalsNames = (portals.tracked_companies || []).map((e) => e?.name).filter((n) => typeof n === 'string');
+  return computeCoverage({ records, portalsNames, rows: readRegistry(registryPath(root)).rows, table, canon });
+}
+
 function renderSummary(receipt) {
   const lines = [`Radar ${receipt.mode} — ${receipt.prospects.new} new, ${receipt.prospects.known} known, ${receipt.prospects.total} total`];
   for (const s of receipt.sources) {
@@ -125,6 +151,14 @@ async function main(args) {
     if (!zones.length || zones.some((z) => !['A', 'B', 'C', 'D'].includes(z))) fail(`--zone takes letters from A to D, got "${zoneArg}"`);
   }
   if (sinceArg !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(sinceArg)) fail(`--since takes YYYY-MM-DD, got "${sinceArg}"`);
+
+  if (hasFlag(args, '--coverage')) {
+    const root = getCareerOpsRoot();
+    const portals = loadPortals(root);
+    const report = await coverageReport(root, loadZoneTable({ dataRoot: root, codeRoot: CODE_ROOT }), buildCompanyCanonicalizer(portals.company_aliases), portals);
+    console.log(hasFlag(args, '--summary') ? renderCoverage(report) : JSON.stringify(report, null, 2));
+    return;
+  }
 
   const all = await loadSources();
   if (hasFlag(args, '--sources')) {
