@@ -1,0 +1,110 @@
+# Radar commute-zone table. Maps places and postcodes to the zones A-D of
+# modes/_brief.md (anchor: Colmar). Zone E and remote are out of the radar.
+#
+# Override: copy this file to {DATA_ROOT}/config/radar-zones.yml. A missing
+# override falls back to this file; a present but unparseable override is an error.
+#
+# Entry fields:
+#   zone      A | B | C | D, or null for a place that only disambiguates a name
+#   country   CH | FR | DE
+#   name      display and match name (case and accent insensitive)
+#   postcodes list of codes or "from-to" ranges (CH 4 digits, FR and DE 5 digits)
+#   aliases   other spellings
+#   default   true: wins when a name is shared and no country hint is given
+#
+# Agglomeration postcodes take the zone of their core town.
+version: 1
+places:
+  # ---- Zone A: Colmar, Mulhouse, Selestat, Guebwiller, Thann, Ribeauville ----
+  - { zone: A, country: FR, name: Colmar, postcodes: ["68000", "68180", "68040", "68920", "68230"], aliases: [Horbourg-Wihr, Ingersheim, Wintzenheim, Turckheim] }
+  - { zone: A, country: FR, name: Mulhouse, postcodes: ["68100", "68200"] }
+  - { zone: A, country: FR, name: Illzach, postcodes: ["68110", "68127"] }
+  - { zone: A, country: FR, name: Rixheim, postcodes: ["68170"] }
+  - { zone: A, country: FR, name: Riedisheim, postcodes: ["68400"] }
+  - { zone: A, country: FR, name: Kingersheim, postcodes: ["68260"] }
+  - { zone: A, country: FR, name: Wittenheim, postcodes: ["68270"] }
+  - { zone: A, country: FR, name: Habsheim, postcodes: ["68440"] }
+  - { zone: A, country: FR, name: Sierentz, postcodes: ["68510"] }
+  - { zone: A, country: FR, name: Cernay, postcodes: ["68700"] }
+  - { zone: A, country: FR, name: Thann, postcodes: ["68800"] }
+  - { zone: A, country: FR, name: Guebwiller, postcodes: ["68500"] }
+  - { zone: A, country: FR, name: Selestat, postcodes: ["67600"] }
+  - { zone: A, country: FR, name: Ribeauville, postcodes: ["68150"] }
+  # ---- Zone B: Basel trinational area, Strasbourg, Freiburg, Belfort, Delemont ----
+  - { zone: B, country: CH, name: Basel, postcodes: ["4000-4059"], aliases: [Bale, Basle, Basel-Stadt, Basel-Landschaft, Baselland] }
+  - { zone: B, country: CH, name: Allschwil, postcodes: ["4123"] }
+  - { zone: B, country: CH, name: Binningen, postcodes: ["4102"] }
+  - { zone: B, country: CH, name: Bottmingen, postcodes: ["4103"] }
+  - { zone: B, country: CH, name: Oberwil, postcodes: ["4104"] }
+  - { zone: B, country: CH, name: Therwil, postcodes: ["4106"] }
+  - { zone: B, country: CH, name: Birsfelden, postcodes: ["4127"] }
+  - { zone: B, country: CH, name: Muttenz, postcodes: ["4132"] }
+  - { zone: B, country: CH, name: Pratteln, postcodes: ["4133"] }
+  - { zone: B, country: CH, name: Munchenstein, postcodes: ["4142"] }
+  - { zone: B, country: CH, name: Dornach, postcodes: ["4143"] }
+  - { zone: B, country: CH, name: Arlesheim, postcodes: ["4144"] }
+  - { zone: B, country: CH, name: Aesch, postcodes: ["4147"] }
+  - { zone: B, country: CH, name: Reinach, postcodes: ["4153"], default: true }
+  - { zone: B, country: CH, name: Liestal, postcodes: ["4410"] }
+  - { zone: B, country: CH, name: Sissach, postcodes: ["4450"] }
+  - { zone: B, country: CH, name: Kaiseraugst, postcodes: ["4303"] }
+  - { zone: B, country: CH, name: Rheinfelden, postcodes: ["4310"], default: true }
+  - { zone: B, country: CH, name: Delemont, postcodes: ["2800"] }
+  - { zone: B, country: FR, name: Saint-Louis, postcodes: ["68300"] }
+  - { zone: B, country: FR, name: Huningue, postcodes: ["68330"] }
+  - { zone: B, country: FR, name: Village-Neuf, postcodes: ["68128"] }
+  - { zone: B, country: FR, name: Altkirch, postcodes: ["68130"] }
+  - { zone: B, country: FR, name: Strasbourg, postcodes: ["67000", "67100", "67200"] }
+  - { zone: B, country: FR, name: Illkirch-Graffenstaden, postcodes: ["67400"], aliases: [Illkirch] }
+  - { zone: B, country: FR, name: Schiltigheim, postcodes: ["67300"] }
+  - { zone: B, country: FR, name: Bischheim, postcodes: ["67800"] }
+  - { zone: B, country: FR, name: Lingolsheim, postcodes: ["67380"] }
+  - { zone: B, country: FR, name: Ostwald, postcodes: ["67540"] }
+  - { zone: B, country: FR, name: Entzheim, postcodes: ["67960"] }
+  - { zone: B, country: FR, name: Geispolsheim, postcodes: ["67118"] }
+  - { zone: B, country: FR, name: Belfort, postcodes: ["90000"] }
+  - { zone: B, country: FR, name: Sevenans, postcodes: ["90400"] }
+  - { zone: B, country: DE, name: Freiburg im Breisgau, postcodes: ["79098-79117"], aliases: [Freiburg], default: true }
+  - { zone: B, country: DE, name: Emmendingen, postcodes: ["79312"] }
+  - { zone: B, country: DE, name: Denzlingen, postcodes: ["79211"] }
+  - { zone: B, country: DE, name: Gundelfingen, postcodes: ["79194"] }
+  - { zone: B, country: DE, name: Umkirch, postcodes: ["79224"] }
+  - { zone: B, country: DE, name: Breisach, postcodes: ["79206"], aliases: [Breisach am Rhein] }
+  - { zone: B, country: DE, name: Bad Krozingen, postcodes: ["79189"] }
+  - { zone: B, country: DE, name: Kirchzarten, postcodes: ["79199"] }
+  - { zone: B, country: DE, name: Waldkirch, postcodes: ["79183"] }
+  - { zone: B, country: DE, name: Mullheim, postcodes: ["79379"] }
+  - { zone: B, country: DE, name: Neuenburg am Rhein, postcodes: ["79395"] }
+  - { zone: B, country: DE, name: Lorrach, postcodes: ["79539-79541"], aliases: [Loerrach] }
+  - { zone: B, country: DE, name: Weil am Rhein, postcodes: ["79576"] }
+  - { zone: B, country: DE, name: Grenzach-Wyhlen, postcodes: ["79639"] }
+  - { zone: B, country: DE, name: Schopfheim, postcodes: ["79650"] }
+  - { zone: B, country: DE, name: Efringen-Kirchen, postcodes: ["79588"] }
+  - { zone: B, country: DE, name: Bad Sackingen, postcodes: ["79713"] }
+  # ---- Zone C: Zurich, Olten, Aarau, Solothurn, Brugg, Baden AG (Switzerland only) ----
+  - { zone: C, country: CH, name: Zurich, postcodes: ["8000-8099"], aliases: [Zuerich] }
+  - { zone: C, country: CH, name: Schlieren, postcodes: ["8952"] }
+  - { zone: C, country: CH, name: Dubendorf, postcodes: ["8600"] }
+  - { zone: C, country: CH, name: Uster, postcodes: ["8610"] }
+  - { zone: C, country: CH, name: Nanikon, postcodes: ["8606"] }
+  - { zone: C, country: CH, name: Stafa, postcodes: ["8712"] }
+  - { zone: C, country: CH, name: Thalwil, postcodes: ["8800"] }
+  - { zone: C, country: CH, name: Winterthur, postcodes: ["8400-8411"] }
+  - { zone: C, country: CH, name: Olten, postcodes: ["4600-4614"] }
+  - { zone: C, country: CH, name: Zofingen, postcodes: ["4800"] }
+  - { zone: C, country: CH, name: Aarau, postcodes: ["5000-5036"] }
+  - { zone: C, country: CH, name: Lenzburg, postcodes: ["5600"] }
+  - { zone: C, country: CH, name: Solothurn, postcodes: ["4500-4515"] }
+  - { zone: C, country: CH, name: Brugg, postcodes: ["5200-5210"] }
+  - { zone: C, country: CH, name: Baden, postcodes: ["5400-5413"] }
+  - { zone: C, country: CH, name: Wettingen, postcodes: ["5430"] }
+  # ---- Zone D: Zug, Baar, Lucerne, Bern (Switzerland only) ----
+  - { zone: D, country: CH, name: Zug, postcodes: ["6300-6339"] }
+  - { zone: D, country: CH, name: Baar, postcodes: ["6340"] }
+  - { zone: D, country: CH, name: Rotkreuz, postcodes: ["6343"] }
+  - { zone: D, country: CH, name: Luzern, postcodes: ["6000-6015"], aliases: [Lucerne] }
+  - { zone: D, country: CH, name: Bern, postcodes: ["3000-3030"], aliases: [Berne] }
+  # ---- Disambiguation only: names that also exist outside the zones ----
+  - { zone: null, country: CH, name: Fribourg, postcodes: ["1700"], aliases: [Freiburg] }
+  - { zone: null, country: DE, name: Baden-Baden, postcodes: ["76530-76534"], aliases: [Baden] }
+  - { zone: null, country: CH, name: Reinach AG, postcodes: ["5734"], aliases: [Reinach] }
