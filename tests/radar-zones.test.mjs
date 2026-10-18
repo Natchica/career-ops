@@ -78,3 +78,15 @@ test('a malformed override throws instead of falling back to the template', asyn
   writeFileSync(join(dataRoot, 'config', 'radar-zones.yml'), 'version: 1\nplaces:\n  - { zone: Z, country: FR, name: X }\n');
   assert.throws(() => loadZoneTable({ dataRoot, codeRoot: CODE_ROOT }), /bad zone/);
 });
+
+test('zoneRecord zones a record from free text or from structured fields', async () => {
+  const { zoneRecord } = await import('../radar/zones.mjs');
+  const t = shippedTable();
+  const free = zoneRecord(t, { name: 'Acme', locationText: 'Basel, Switzerland' });
+  assert.deepEqual(free.sites, [{ place: 'Basel', zone: 'B', country: 'CH' }]);
+  assert.equal(free.country, 'CH');
+  const structured = zoneRecord(t, { name: 'Beta', postcode: '68000', country: 'FR' });
+  assert.deepEqual(structured.sites, [{ place: 'Colmar', zone: 'A', country: 'FR' }]);
+  assert.deepEqual(zoneRecord(t, { name: 'Gamma', locationText: 'Remote' }).sites, []);
+  assert.deepEqual(zoneRecord(t, { name: 'Delta', place: 'Paris', country: 'FR' }).sites, []);
+});
