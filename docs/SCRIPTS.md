@@ -300,6 +300,29 @@ The offline half — *which enabled entries does no provider claim?* — is pure
 
 ---
 
+## radar
+
+Census of the employers with a site in commute zones A to D. It names companies and does nothing else with them: no evaluation, screening, scoring or contact, and it never writes `portals.yml`, `data/pipeline.md` or the tracker. Each employer becomes one Prospect (one brand or group, in-zone sites listed) in `data/radar.tsv`. Zone E and remote are out. The Radar is local only. Full detail: `modes/radar.md`.
+
+Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `github-orgs` (organisations only, token optional), and `directories` (documents the vetted candidates and enables none). Preview is the default; nothing is written without `--write`.
+
+```bash
+node radar.mjs --sources                          # sources with auth state and last save (JSON)
+node radar.mjs --source sirene --zone A --summary # preview one source for one zone, writes nothing
+node radar.mjs --source sirene --zone A --write   # save what the preview showed
+node radar.mjs --since 2026-10-01                 # also report prospects first seen since a date
+node radar.mjs --coverage --summary               # recall against the companies already known to be in a zone
+node radar.mjs --resume                           # reuse sweeps stored in the last 24 hours
+```
+
+`--coverage` reports two recall figures. The overall one is flattering because `ats-employers` reads the same scan history as the baseline. The honest one counts only companies another source also named. Both are a floor.
+
+The same runs are available on the web app's Radar page, where Save needs a fresh preview of the same source.
+
+**Exit codes:** `0` when at least one selected source ran cleanly (or for `--sources`, `--coverage`, `--help`); `1` when every selected source failed or was skipped, or on a usage error, or when `data/radar.tsv` is malformed.
+
+---
+
 ## pdf
 
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
