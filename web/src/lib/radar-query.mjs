@@ -155,7 +155,9 @@ export function queryProspects(rows, query) {
  */
 export function summarize(rows) {
   const byZone = { A: 0, B: 0, C: 0, D: 0 };
+  /** @type {Record<string, number>} */
   const byCountry = {};
+  /** @type {Record<string, number>} */
   const bySource = {};
   let latestRun = null;
   for (const row of rows) {
