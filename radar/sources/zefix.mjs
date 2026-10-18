@@ -25,8 +25,8 @@
  * only a "strong" purpose (building software, IT services) becomes a record and
  * earns the software signal. A "weak" mention (trading in hardware and software,
  * holding shares in software firms) is counted in the log and dropped. The text
- * itself is never stored, and sole proprietorships are skipped because their
- * name is a person's.
+ * itself is never stored. Sole proprietorships are skipped because their name
+ * is a person's, and so are firms in liquidation, which are not hiring.
  */
 
 import { fetchJsonWithRetry } from '../../providers/_http.mjs';
@@ -38,6 +38,8 @@ const PAGE = 500;
 const BATCH = 25;
 const PACE_MS = 3000;
 const SOLE_PROPRIETORSHIP = 'https://ld.admin.ch/ech/97/legalforms/0101';
+/** A firm being wound up is not hiring. The register keeps it, flagged only in its name. */
+const IN_LIQUIDATION = /\b(in liquidation|en liquidation|in liquidazione)\b/i;
 
 /** Stems the server filters on: a superset of what the local grading needs. */
 const SERVER_STEMS = ['software', 'informatik', 'programmier', 'logiciel', 'informatique', 'it-dienst', 'it-beratung', 'it consulting'];
@@ -149,6 +151,7 @@ export default {
 
       const records = [];
       let weak = 0;
+      let winding = 0;
       for (let offset = 0; ; offset += PAGE) {
         const answer = await ask(buildQuery(group, offset));
         const rows = answer?.results?.bindings ?? [];
@@ -158,6 +161,7 @@ export default {
           const name = value(row, 'name').trim();
           if (!uid || !name || seen.has(uid)) continue;
           seen.add(uid);
+          if (IN_LIQUIDATION.test(name)) { winding++; continue; }
           const strength = purposeStrength(value(row, 'd'));
           if (strength === 'weak') { weak++; continue; }
           if (strength !== 'strong') continue;
@@ -178,6 +182,7 @@ export default {
         if (rows.length < PAGE) break;
       }
       if (weak > 0) ctx.log?.(`zefix: skipped ${weak} weak purpose match(es) in ${unit}`);
+      if (winding > 0) ctx.log?.(`zefix: skipped ${winding} firm(s) in liquidation in ${unit}`);
       ctx.cache?.set(unit, records);
       yield* records;
       done();
