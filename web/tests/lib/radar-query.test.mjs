@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRadarQuery, queryProspects, summarize, toView } from "../../src/lib/radar-query.mjs";
+import { parseRadarQuery, queryProspects, summarize, toView, radarSearchString } from "../../src/lib/radar-query.mjs";
 
 const row = (over = {}) => ({
   key: "acme", name: "Acme", aliases: "#siren:1;ACME SAS", sites: "Basel:B;Zurich:C", country: "CH", sector: "62.01Z",
@@ -131,4 +131,22 @@ test("50k rows filter, sort and page in under 200 ms", () => {
   console.log(`radar 50k query: ${Math.round(ms)} ms cpu`);
   assert.equal(result.rows.length, 50);
   assert.ok(ms < 200, `took ${ms} ms of cpu`);
+});
+
+test("summary counts prospects per source and ignores the internal board marker", () => {
+  const rows = [
+    row({ key: "a", sources: "sirene;ats-employers;ats-employers:board" }),
+    row({ key: "b", sources: "sirene" }),
+    row({ key: "c", sources: "github-orgs" }),
+  ];
+  assert.deepEqual(summarize(rows).bySource, { "ats-employers": 1, "github-orgs": 1, sirene: 2 });
+});
+
+test("the search string builder emits only non-default values and round-trips through the parser", () => {
+  assert.equal(radarSearchString({}), "");
+  const query = { zones: ["B", "C"], country: "CH", source: "sirene", sizeBand: "20-49", minSignals: 2, since: "2026-10-01", q: "acme ag", sort: "signals", dir: "asc", page: 3, pageSize: 25 };
+  const text = radarSearchString(query);
+  const parsed = parseRadarQuery(new URLSearchParams(text));
+  assert.deepEqual(parsed, query);
+  assert.equal(radarSearchString({ page: 1, pageSize: 50, sort: "name", dir: "asc" }), "");
 });
