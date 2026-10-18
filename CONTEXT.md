@@ -42,6 +42,14 @@ _Avoid_: mission, mandat, Suchauftrag, opportunity, lead
 A posting URL sitting in `data/pipeline.md` Pending that has not been evaluated yet, written there by the scanner or by an ingest plugin (`job-alerts`, `linkedin-alerts`). A Lead is not a Mandate: nobody presented it, and it carries no channel until it is evaluated.
 _Avoid_: opportunity, match (the email sender's word), offer (reserved for an evaluated posting and for `data/outcomes/`)
 
+**Prospect**:
+A company recorded in the radar registry (`data/radar.tsv`) because it has at least one site in a target commute zone. A Prospect is not evaluated, not approached and not necessarily hiring; it may have no scannable board and no posting.
+_Avoid_: lead (a posting URL), target (implies the candidate chose it), company entry, account
+
+**Radar**:
+The census tool and registry that enumerates Prospects from registers, job-board employer mining, startup directories and GitHub orgs. It names companies and does nothing else with them.
+_Avoid_: discover (the ATS board resolver `discover-ats.mjs`, which consumes names the Radar produces)
+
 **Brief**:
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
@@ -61,6 +69,8 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - A **Mandate** names at most one end employer; until named, the row's Company is `?` and no CV authorization exists
 - **Name-before-send** gates every **Mandate** individually; registering with a Cabinet grants nothing
 - A **Body-shop** is never a **Cabinet**: it fails vetting on the contract-signer test and becomes a `data/blacklist.md` suggestion
+- The **Radar** produces **Prospects**; a **Prospect** may later resolve to a `portals.yml` board, at which point the scanner starts producing **Leads** for it
+- A **Prospect** is one brand or group with its in-zone sites listed; legal entities are aliases, never separate Prospects
 - A **Brief** is versioned; the registry records which version each **Cabinet** holds
 
 ## Example dialogue
