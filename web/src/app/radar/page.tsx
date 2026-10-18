@@ -1,4 +1,5 @@
 import { Telescope } from "lucide-react";
+import { RadarSources } from "@/components/radar-sources";
 import { RadarView } from "@/components/radar-view";
 import { loadRadar } from "@/lib/core/radar";
 
@@ -27,6 +28,9 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
       <p className="mt-1.5 text-xs text-faint">
         Backed by <code className="text-muted">data/radar.tsv</code>, built by <code className="text-muted">radar.mjs</code>. Local only.
       </p>
+      <div className="mt-6">
+        <RadarSources defaultOpen={initial.state !== "ok" || initial.summary.total === 0} />
+      </div>
       <div className="mt-6">
         <RadarView initial={initial} />
       </div>
