@@ -184,3 +184,20 @@ export function resolveFreeText(table, text) {
   }
   return sites;
 }
+
+/**
+ * Attach the in-zone sites to a raw source record. A record with
+ * `locationText` is zoned from free text, any other from its place and
+ * postcode. `sites` is empty when nothing resolves into zones A to D, and the
+ * caller counts that record as unzoned. `country` defaults to the first site's.
+ */
+export function zoneRecord(table, raw) {
+  let sites;
+  if (raw.locationText !== undefined) {
+    sites = resolveFreeText(table, raw.locationText);
+  } else {
+    const r = resolveZone(table, { place: raw.place, postcode: raw.postcode, country: raw.country });
+    sites = r.zone ? [{ place: r.place, zone: r.zone, country: r.country }] : [];
+  }
+  return { ...raw, sites, country: raw.country ?? sites[0]?.country };
+}
