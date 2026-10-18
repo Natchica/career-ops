@@ -118,14 +118,22 @@ function SourceCard({ source, run, busy, onPreview, onSave, onDiscard }: {
           <p className="font-medium text-foreground">{source.id}</p>
           <p className="text-xs text-faint">{FAMILY[source.family] ?? source.family}</p>
         </div>
-        <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", ready ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400")}>
-          {ready ? "Ready" : "Credentials missing"}
+        <span
+          className={cn(
+            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+            ready && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+            source.auth === "missing-credentials" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+            source.auth === "not-built" && "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300",
+          )}
+        >
+          {ready ? "Ready" : source.auth === "not-built" ? "Not available" : "Credentials missing"}
         </span>
       </div>
       <p className="mt-2 text-xs text-muted">
         {source.lastSaved ? `Last saved ${source.lastSaved}` : "Never saved"}
-        {!ready && <> · set <code className="text-foreground">{source.vars.join(", ")}</code></>}
+        {source.auth === "missing-credentials" && <> · set <code className="text-foreground">{source.vars.join(", ")}</code></>}
       </p>
+      {source.auth === "not-built" && source.reason && <p className="mt-1 text-xs text-muted">{source.reason}</p>}
 
       {working && (
         <p className="mt-3 flex items-center gap-2 text-sm text-muted" aria-live="polite">
