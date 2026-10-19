@@ -106,6 +106,12 @@ export function bestZone(row, rules) {
   return best;
 }
 
+/** The Prospect's name and its alias spellings, without the `#` register ids. */
+export function prospectNames(row) {
+  const aliases = String(row.aliases ?? '').split(';').map((a) => a.trim()).filter((a) => a && !a.startsWith('#'));
+  return [row.name, ...aliases].filter(Boolean);
+}
+
 const VALID_OVERRIDES = new Set(['1', '2', '3', 'out']);
 
 /**
