@@ -132,6 +132,7 @@ const USAGE = `Usage:
   node discover-ats.mjs --in companies.yml --vendors gh,ashby,lever  # restrict probes
   node discover-ats.mjs --in companies.yml --vendors workday         # Workday only
   node discover-ats.mjs --in companies.yml --small-threshold 10  # what counts as a small board (default ${DEFAULT_SMALL_THRESHOLD}, 0 = off)
+  node discover-ats.mjs --from-radar --zone A,B --limit 20  # probe tier 1 and 2 Prospects of data/radar.tsv that have no board
   node discover-ats.mjs --self-test                   # inline test suite
   node discover-ats.mjs --help                        # print this usage block
 
@@ -1103,8 +1104,8 @@ function runSelfTest() {
 // --write is the explicit opt-in to modify portals.yml (a user-layer file);
 // without it the run is preview-only. --dry-run is accepted as a harmless alias
 // for "don't write" (the default) so an older invocation never surprises anyone.
-const KNOWN_FLAGS = ['--in', '--vendors', '--small-threshold', '--write', '--dry-run', '--summary', '--self-test', '--help', '-h'];
-const VALUE_FLAGS = ['--in', '--vendors', '--small-threshold'];
+const KNOWN_FLAGS = ['--in', '--vendors', '--small-threshold', '--from-radar', '--zone', '--limit', '--write', '--dry-run', '--summary', '--self-test', '--help', '-h'];
+const VALUE_FLAGS = ['--in', '--vendors', '--small-threshold', '--zone', '--limit'];
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -1163,8 +1164,38 @@ function parseArgs(argv) {
     process.exit(1);
   }
 
+  // --from-radar takes its companies from data/radar.tsv (tier 1 and 2, no board
+  // yet). --zone and --limit only narrow that selection.
+  const fromRadar = args.includes('--from-radar');
+  const zoneArg = valueOf('--zone');
+  const limitArg = valueOf('--limit');
+  if (!fromRadar && (zoneArg !== null || limitArg !== null)) {
+    console.error('Error: --zone and --limit only apply with --from-radar');
+    process.exit(1);
+  }
+  if (fromRadar && (names.length > 0 || valueOf('--in') !== null)) {
+    console.error('Error: --from-radar takes its companies from data/radar.tsv; drop --in and the company names');
+    process.exit(1);
+  }
+  let radarZones = null;
+  if (zoneArg !== null) {
+    radarZones = zoneArg.split(',').map((z) => z.trim().toUpperCase());
+    if (radarZones.some((z) => !['A', 'B', 'C', 'D'].includes(z))) {
+      console.error(`Error: --zone takes letters from A to D, got "${zoneArg}"`);
+      process.exit(1);
+    }
+  }
+  const radarLimit = limitArg === null ? 20 : Number(limitArg);
+  if (!/^\d+$/.test(String(limitArg ?? '20')) || radarLimit < 1 || radarLimit > 200) {
+    console.error(`Error: --limit takes a whole number from 1 to 200, got "${limitArg}"`);
+    process.exit(1);
+  }
+
   return {
     smallThreshold,
+    fromRadar,
+    radarZones,
+    radarLimit,
     inPath: valueOf('--in'),
     vendors,
     includeWorkday,
@@ -1193,7 +1224,33 @@ async function main() {
     rawYaml = readFileSync(path, 'utf-8');
   }
 
+  const radarWarnings = [];
+  if (opts.fromRadar) {
+    // Imported here so every other invocation stays independent of the radar.
+    const { readRegistry, registryPath } = await import('./radar/registry.mjs');
+    const { loadTierRules, selectForDiscovery } = await import('./radar/tiers.mjs');
+    const { RadarConfigError } = await import('./radar/zones.mjs');
+    const root = getCareerOpsRoot();
+    const registry = readRegistry(registryPath(root));
+    if (registry.missing) {
+      console.error(`Error: no registry at ${registryPath(root)}: run radar.mjs --write first`);
+      process.exit(1);
+    }
+    let rules;
+    try {
+      rules = loadTierRules({ dataRoot: root, codeRoot: dirname(fileURLToPath(import.meta.url)) });
+    } catch (e) {
+      if (e instanceof RadarConfigError) { console.error(`Error: ${e.message}`); process.exit(1); }
+      throw e;
+    }
+    if (registry.rows.length > 0 && registry.rows.every((p) => !p.tier)) {
+      radarWarnings.push('no Prospect has a tier yet: run node radar-tiers.mjs --write first');
+    }
+    opts.names = selectForDiscovery(registry.rows, rules, { zones: opts.radarZones, limit: opts.radarLimit }).map((p) => p.name);
+  }
+
   const { companies, warnings } = parseCompanyInput(rawYaml, opts.names);
+  warnings.push(...radarWarnings);
 
   if (companies.length === 0) {
     // Emit the same metadata shape as the normal path (documented in
