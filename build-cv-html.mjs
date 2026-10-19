@@ -651,6 +651,34 @@ function buildInterests(items) {
     .join(', ');
 }
 
+// Languages: one "Language (level)" text per valid entry, in payload order. The
+// level is free text (a CEFR level or "native"); an entry with none is listed bare.
+function languageItems(languages) {
+  if (!Array.isArray(languages)) return [];
+  return languages
+    .filter(e => hasRequiredFields(e, 'languages', 'html'))
+    .map(e => {
+      const language = String(e.language).trim();
+      return presentText(e.level) ? `${language} (${String(e.level).trim()})` : language;
+    });
+}
+
+// The whole Languages section, built from the same classes the Skills grid uses
+// so it needs no CSS of its own. Empty string when there is nothing to show.
+function buildLanguagesBlock(payload) {
+  const entries = (Array.isArray(payload.languages) ? payload.languages : []).filter(e => hasRequiredFields(e, 'languages', 'html'));
+  if (entries.length === 0) return '';
+  const rows = entries.map(e => {
+    const language = escapeHtml(String(e.language).trim());
+    return presentText(e.level)
+      ? `    <div class="skill-item"><span class="skill-category">${language}:</span> ${escapeHtml(String(e.level).trim())}</div>`
+      : `    <div class="skill-item">${language}</div>`;
+  }).join('\n');
+  return `<div class="section">\n    <div class="section-title">${escapeHtml(languagesTitle(payload))}</div>\n    <div class="skills-grid">\n${rows}\n    </div>\n  </div>`;
+}
+
+const languagesTitle = (payload) => (presentText(payload.sections?.languages) ? String(payload.sections.languages).trim() : 'Languages');
+
 function buildSkills(categories, partial) {
   if (!Array.isArray(categories) || categories.length === 0) return '';
   if (!partial) {
@@ -752,7 +780,13 @@ function buildTitle(candidate) {
   return title ? `<div class="header-title">${escapeHtml(title)}</div>` : '';
 }
 
-function renderReport(payload, partials) {
+function foldLanguagesIntoSkills(payload, hasLanguagesSlot) {
+  const items = hasLanguagesSlot ? [] : languageItems(payload.languages);
+  if (items.length === 0) return payload.skills;
+  return [...(Array.isArray(payload.skills) ? payload.skills : []), { category: languagesTitle(payload), items: items.join(', ') }];
+}
+
+function renderReport(payload, partials, hasLanguagesSlot = false) {
   const sectionTitles = { ...DEFAULT_SECTION_TITLES, ...(payload.sections || {}) };
   const candidate = payload.candidate || {};
   // The sheet this body has to fit is chosen by generate-pdf.mjs, so both read
@@ -780,7 +814,9 @@ function renderReport(payload, partials) {
     SECTION_INTERESTS: escapeHtml(sectionTitles.interests),
     INTERESTS: buildInterests(payload.interests),
     SECTION_SKILLS: escapeHtml(sectionTitles.skills),
-    SKILLS: buildSkills(payload.skills, partials.get('skills')),
+    // A template with no Languages slot keeps the facts: they become the last
+    // Skills category, on a copy, so the payload itself is never changed.
+    SKILLS: buildSkills(foldLanguagesIntoSkills(payload, hasLanguagesSlot), partials.get('skills')),
     CONSENT: escapeHtml((payload.consent || '').trim()),
   };
   return { substitutions, candidate };
@@ -793,7 +829,7 @@ function renderHtml(template, payload, templatePath) {
   // template. Falls back to built-in builders when no partials directory exists.
   const partials = templatePath ? loadSectionPartials(templatePath) : new Map();
 
-  const { substitutions, candidate } = renderReport(payload, partials);
+  const { substitutions, candidate } = renderReport(payload, partials, template.includes('{{LANGUAGES_BLOCK}}'));
 
   // The contact row and photo carry conditional markup (dropped separators /
   // no <img>), so they are rebuilt as whole blocks before placeholder fill.
@@ -807,6 +843,20 @@ function renderHtml(template, payload, templatePath) {
   // output is unchanged from the token-only replace this replaces.
   const titleBlock = buildTitle(candidate);
   html = html.replace(/\n([ \t]*)\{\{TITLE_BLOCK\}\}/g, (_, indent) => (titleBlock ? `\n${indent}${titleBlock}` : ''));
+
+  // The Languages slot: a whole section when there are entries; otherwise the
+  // marker line, the placeholder line and one blank line are cut, so a CV with
+  // no languages is byte-identical to one built before the slot existed. If the
+  // template spells the slot differently, the bare token is dropped instead.
+  if (html.includes('{{LANGUAGES_BLOCK}}')) {
+    const languagesBlock = buildLanguagesBlock(payload);
+    if (languagesBlock) {
+      html = html.replace(/\{\{LANGUAGES_BLOCK\}\}/g, () => languagesBlock);
+    } else {
+      html = html.replace(/[ \t]*<!--\s+LANGUAGES\s+-->[ \t]*\n[ \t]*\{\{LANGUAGES_BLOCK\}\}[ \t]*\n(?:[ \t]*\n)?/, '');
+      html = html.replace(/\{\{LANGUAGES_BLOCK\}\}/g, '');
+    }
+  }
 
   // Drop the optional sections (projects, education) that have no entries, so
   // an absent one leaves no bare header behind. See cv-sections-core.mjs.
@@ -898,15 +948,18 @@ function mdUrl(url) {
 
 // Section keys in the order the template places their {{SECTION_*}} titles.
 function templateSectionOrder(template) {
-  return Object.keys(DEFAULT_SECTION_TITLES)
-    .map(key => [key, template.indexOf(`{{SECTION_${key.toUpperCase()}}}`)])
+  return [
+    ...Object.keys(DEFAULT_SECTION_TITLES).map(key => [key, template.indexOf(`{{SECTION_${key.toUpperCase()}}}`)]),
+    // Languages is a block slot, not a {{SECTION_*}} title, so it is placed by its own token.
+    ['languages', template.indexOf('{{LANGUAGES_BLOCK}}')],
+  ]
     .filter(([, idx]) => idx !== -1)
     .sort((a, b) => a[1] - b[1])
     .map(([key]) => key);
 }
 
 function renderMarkdown(payload, template) {
-  const titles = { ...DEFAULT_SECTION_TITLES, ...(payload.sections || {}) };
+  const titles = { ...DEFAULT_SECTION_TITLES, languages: languagesTitle(payload), ...(payload.sections || {}) };
   const candidate = payload.candidate || {};
   const out = [];
   const bodies = new Map();
@@ -976,7 +1029,15 @@ function renderMarkdown(payload, template) {
     .join(', ');
   if (mdLine(interests)) section('interests', [mdLine(interests), '']);
 
-  const skills = list(payload.skills).filter(c => hasRequiredFields(c, 'skills', 'html')).map(c =>
+  // Languages: its own section when the template has the slot, else a last Skills line.
+  const hasLanguagesSlot = template.includes('{{LANGUAGES_BLOCK}}');
+  if (hasLanguagesSlot) {
+    const rows = list(payload.languages).filter(e => hasRequiredFields(e, 'languages', 'html')).map(e =>
+      `- ${presentText(e.level) ? `**${mdLine(e.language)}:** ${mdLine(e.level)}` : mdLine(e.language)}`);
+    section('languages', rows.length ? [...rows, ''] : []);
+  }
+
+  const skills = list(foldLanguagesIntoSkills(payload, hasLanguagesSlot)).filter(c => hasRequiredFields(c, 'skills', 'html')).map(c =>
     `- ${mdLine(c.category) ? `**${mdLine(c.category)}:** ` : ''}${mdLine(joinItems(c.items))}`);
   section('skills', skills.length ? [...skills, ''] : []);
 
