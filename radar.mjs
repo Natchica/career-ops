@@ -20,7 +20,7 @@ import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { localToday } from './lib/local-today.mjs';
 import { loadZoneTable, zoneRecord } from './radar/zones.mjs';
 import { baseKey, mergeRecords } from './radar/identity.mjs';
-import { RADAR_COLUMNS, readRegistry, registryPath, writeRegistry } from './radar/registry.mjs';
+import { RADAR_COLUMNS, readRegistry, registryPath, updateRegistry } from './radar/registry.mjs';
 import { makeRawCache } from './radar/cache.mjs';
 import { computeCoverage } from './radar/coverage.mjs';
 import { makeHttpCtx } from './providers/_http.mjs';
@@ -219,12 +219,18 @@ async function main(args) {
     }
   }
 
-  const merged = mergeRecords(existing.rows, zoned, { canon, today, portalsNames });
+  const mergeInto = (rows) => mergeRecords(rows, zoned, { canon, today, portalsNames });
   const anyOk = receipts.some((r) => r.status === 'ok');
+  let merged = mergeInto(existing.rows);
   let written = false;
   if (write && anyOk) {
-    const columns = [...existing.columns, ...RADAR_COLUMNS.filter((c) => !existing.columns.includes(c))];
-    await writeRegistry(path, { columns, rows: merged.rows });
+    // The sweep can take minutes: merge into the rows on disk now, under the lock,
+    // so a mark or override written meanwhile is not overwritten with stale rows.
+    merged = await updateRegistry(path, (fresh) => {
+      const result = mergeInto(fresh.rows);
+      const columns = [...fresh.columns, ...RADAR_COLUMNS.filter((c) => !fresh.columns.includes(c))];
+      return { columns, rows: result.rows, result };
+    });
     written = true;
   }
 
