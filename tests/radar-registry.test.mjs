@@ -13,7 +13,8 @@ import { buildCompanyCanonicalizer } from '../scan.mjs';
 const sandbox = () => mkdtempSync(join(tmpdir(), 'radar-registry-'));
 const row = (over = {}) => ({
   key: 'acme', name: 'Acme', aliases: '', sites: 'Colmar:A', country: 'FR', sector: '', size_band: '?', signals: '0',
-  sources: 'sirene', first_seen: '2026-10-18', last_seen: '2026-10-18', portals_ref: '—', notes: '', ...over,
+  sources: 'sirene', first_seen: '2026-10-18', last_seen: '2026-10-18', portals_ref: '—', notes: '',
+  tier: '', tier_reason: '', tier_override: '', spontaneous: '', ...over,
 });
 
 test('registry path sits under data/ of the resolved root', () => {
@@ -114,4 +115,60 @@ test('50k rows parse, group and serialize in under 3 seconds', () => {
   assert.equal(second.newKeys.length, 0);
   assert.equal(second.rows.length, 50_000);
   assert.ok(ms < 3000, `took ${ms} ms of cpu`);
+});
+
+// ---- tier columns and the locked read-modify-write ---------------------------
+import { updateRegistry } from '../radar/registry.mjs';
+
+test('RADAR_COLUMNS ends with the tier and spontaneous columns', () => {
+  assert.deepEqual(RADAR_COLUMNS.slice(-4), ['tier', 'tier_reason', 'tier_override', 'spontaneous']);
+});
+
+test('a registry written before the tier columns parses clean and serializes byte-identical', () => {
+  const legacy = RADAR_COLUMNS.slice(0, 13);
+  const text = serializeRegistry({ columns: legacy, rows: [row()] });
+  const parsed = parseRegistry(text);
+  assert.equal(parsed.rows[0].tier, undefined);
+  assert.equal(serializeRegistry(parsed), text);
+});
+
+test('updateRegistry hands mutate what is on disk now, not an earlier snapshot', async () => {
+  const dir = sandbox();
+  const path = join(dir, 'data', 'radar.tsv');
+  await writeRegistry(path, { columns: RADAR_COLUMNS, rows: [row()] });
+  readRegistry(path);
+  await writeRegistry(path, { columns: RADAR_COLUMNS, rows: [row(), row({ key: 'beta', name: 'Beta' })] });
+  let seen;
+  await updateRegistry(path, (fresh) => { seen = fresh.rows.map((p) => p['key']); return { columns: fresh.columns, rows: fresh.rows }; });
+  assert.deepEqual(seen, ['acme', 'beta']);
+});
+
+test('updateRegistry returns the result mutate gives and persists the rows', async () => {
+  const dir = sandbox();
+  const path = join(dir, 'data', 'radar.tsv');
+  await writeRegistry(path, { columns: RADAR_COLUMNS, rows: [row()] });
+  const result = await updateRegistry(path, (fresh) => ({
+    columns: fresh.columns, rows: fresh.rows.map((p) => ({ ...p, notes: 'kept' })), result: 'done',
+  }));
+  assert.equal(result, 'done');
+  assert.equal(readRegistry(path).rows[0].notes, 'kept');
+  assert.equal(existsSync(`${path}.lock`), false);
+});
+
+test('updateRegistry rejects with ELOCKED while another writer holds the lock', async () => {
+  const dir = sandbox();
+  mkdirSync(join(dir, 'data'));
+  const path = join(dir, 'data', 'radar.tsv');
+  writeFileSync(`${path}.lock`, '1');
+  await assert.rejects(updateRegistry(path, (fresh) => fresh), (e) => e.code === 'ELOCKED');
+});
+
+test('a mutate that throws leaves the file byte-identical and the lock released', async () => {
+  const dir = sandbox();
+  const path = join(dir, 'data', 'radar.tsv');
+  await writeRegistry(path, { columns: RADAR_COLUMNS, rows: [row()] });
+  const before = readFileSync(path);
+  await assert.rejects(updateRegistry(path, () => { throw new Error('nope'); }), /nope/);
+  assert.deepEqual(readFileSync(path), before);
+  assert.equal(existsSync(`${path}.lock`), false);
 });
