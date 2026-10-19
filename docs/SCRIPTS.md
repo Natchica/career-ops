@@ -359,6 +359,21 @@ A Prospect is skipped by `next` when its `spontaneous` cell is not empty, its co
 
 ---
 
+## verify-swiss-cv
+
+Warn-only check of a CV payload against the jobup.ch Swiss CV checklist. No network and no model. It prints each finding and exits `0`; the fact gate `verify-cv-facts.mjs` stays the only hard gate.
+
+```bash
+node verify-swiss-cv.mjs output/cv-nathan-gaud-acme.json                      # payload only
+node verify-swiss-cv.mjs output/cv-nathan-gaud-acme.json --pdf output/send/acme/Gaud_Nathan_CV.pdf   # also the PDF size
+```
+
+Findings: `curriculum-vitae` (the heading), `missing-address`, `missing-nationality`, `missing-work-permit`, `missing-photo`, `summary-too-long` (more than 5 sentences), `vague-adjective` (English, French and German list, profile only), `missing-languages`, `language-level` (no CEFR level A1 to C2 and not "native"), and with `--pdf`, `pdf-too-large` (over 5 MB).
+
+**Exit codes:** `0` with or without findings; `1` on a usage error or unreadable input.
+
+---
+
 ## pdf
 
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
