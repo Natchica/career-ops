@@ -50,6 +50,10 @@ _Avoid_: lead (a posting URL), target (implies the candidate chose it), company 
 The census tool and registry that enumerates Prospects from registers, job-board employer mining, startup directories and GitHub orgs. It names companies and does nothing else with them.
 _Avoid_: discover (the ATS board resolver `discover-ats.mjs`, which consumes names the Radar produces)
 
+**Spontaneous application**:
+A Direct application sent to a Prospect with no Lead behind it: no posting exists, so the CV is framed from the profile's no-JD row (`modes/_profile.md`, "Your Adaptive Framing") instead of being tailored to a JD.
+_Avoid_: cold application (collides with cold outreach in `contacto`), unsolicited, speculative; keep "candidature spontanée" and "Initiativbewerbung" as market vocabulary only
+
 **Brief**:
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
@@ -71,6 +75,7 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - A **Body-shop** is never a **Cabinet**: it fails vetting on the contract-signer test and becomes a `data/blacklist.md` suggestion
 - The **Radar** produces **Prospects**; a **Prospect** may later resolve to a `portals.yml` board, at which point the scanner starts producing **Leads** for it
 - A **Prospect** is one brand or group with its in-zone sites listed; legal entities are aliases, never separate Prospects
+- A **Spontaneous application** targets a **Prospect** directly; it has no **Lead**, its **Via** is `—` (Direct), and it enters the tracker only once it is actually sent
 - A **Brief** is versioned; the registry records which version each **Cabinet** holds
 
 ## Example dialogue
