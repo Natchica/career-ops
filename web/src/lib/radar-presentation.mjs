@@ -122,3 +122,28 @@ export function coverageView(coverage) {
     headline: `${percent}% of the ${size} companies you already know in your zones`,
   };
 }
+
+// Tier chips use hues no zone uses (emerald, sky, amber and violet belong to zones A-D),
+// and every tier has a text label, so colour never carries the rank alone.
+export const TIER_TONES = {
+  1: { label: "T1", sr: "Tier 1: best fit, start here", chip: "bg-rose-500/15 text-rose-700 dark:text-rose-400" },
+  2: { label: "T2", sr: "Tier 2: good zone, no technical signal yet", chip: "bg-teal-500/15 text-teal-700 dark:text-teal-400" },
+  3: { label: "T3", sr: "Tier 3: no zone A to D on record", chip: "bg-orange-500/15 text-orange-700 dark:text-orange-400" },
+  out: { label: "Out", sr: "Out: ruled out, see the reason", chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300" },
+  none: { label: "Not tiered", sr: "Not tiered yet: run radar-tiers", chip: "bg-slate-500/10 text-slate-600 dark:text-slate-400" },
+};
+
+export function tierTone(tier) {
+  return TIER_TONES[tier] ?? TIER_TONES.none;
+}
+
+export const STATE_TONES = {
+  none: { label: "Untouched", chip: "bg-slate-500/10 text-slate-600 dark:text-slate-400" },
+  drafted: { label: "Drafted", chip: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400" },
+  skipped: { label: "Skipped", chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300" },
+  sent: { label: "Sent", chip: "bg-lime-500/15 text-lime-700 dark:text-lime-400" },
+};
+
+export function stateTone(state) {
+  return STATE_TONES[state] ?? STATE_TONES.none;
+}
