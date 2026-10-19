@@ -144,7 +144,7 @@ test("summary counts prospects per source and ignores the internal board marker"
 
 test("the search string builder emits only non-default values and round-trips through the parser", () => {
   assert.equal(radarSearchString({}), "");
-  const query = { zones: ["B", "C"], country: "CH", source: "sirene", sizeBand: "20-49", minSignals: 2, since: "2026-10-01", q: "acme ag", sort: "signals", dir: "asc", page: 3, pageSize: 25 };
+  const query = { zones: ["B", "C"], country: "CH", source: "sirene", sizeBand: "20-49", minSignals: 2, since: "2026-10-01", tier: null, state: null, q: "acme ag", sort: "signals", dir: "asc", page: 3, pageSize: 25 };
   const text = radarSearchString(query);
   const parsed = parseRadarQuery(new URLSearchParams(text));
   assert.deepEqual(parsed, query);
