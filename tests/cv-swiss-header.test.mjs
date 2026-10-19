@@ -36,12 +36,25 @@ function build(payload, extra = []) {
 const contactRows = (html) => [...html.matchAll(/<div class="contact-row[^"]*"[^>]*>[\s\S]*?<\/div>/g)].map((m) => m[0]);
 const items = (row) => [...row.matchAll(/<(a|span)\b[^>]*>([\s\S]*?)<\/\1>/g)].map((m) => m[2]);
 
-test('a street address replaces the bare location in the contact row, with the same number of items', () => {
+test('a street address leaves the contact row and leads the personal row; the location goes with it', () => {
   const plain = contactRows(build(basePayload()))[0];
-  const withAddress = contactRows(build(basePayload({ address: 'Rue Exemple 1, 68000 Colmar' })))[0];
-  assert.match(withAddress, /Rue Exemple 1, 68000 Colmar/);
-  assert.doesNotMatch(withAddress, /<span>Colmar, France<\/span>/);
-  assert.equal(items(withAddress).length, items(plain).length);
+  const html = build(basePayload({ address: 'Rue Exemple 1, 68000 Colmar' }));
+  const [first, second] = contactRows(html);
+  assert.doesNotMatch(first, /Rue Exemple 1/);
+  assert.doesNotMatch(first, /Colmar, France/);
+  assert.equal(items(first).length, items(plain).length - 1);
+  assert.match(second, /contact-row--personal/);
+  assert.deepEqual(items(second), ['Rue Exemple 1, 68000 Colmar']);
+});
+
+test('the address comes first, then nationality, permit and date of birth', () => {
+  const html = build(basePayload({ address: 'Rue Exemple 1, 68000 Colmar', nationality: 'Nationality: French', work_permit: 'Permit: G/B (EU-CH)', date_of_birth: 'Born: 01.02.1990' }));
+  assert.deepEqual(items(personal(html)), ['Rue Exemple 1, 68000 Colmar', 'Nationality: French', 'Permit: G/B (EU-CH)', 'Born: 01.02.1990']);
+});
+
+test('the address text is HTML-escaped', () => {
+  const row = personal(build(basePayload({ address: '<i>x</i> & y' })));
+  assert.match(row, /&lt;i&gt;x&lt;\/i&gt; &amp; y/);
 });
 
 test('a blank address leaves the location in place', () => {
@@ -75,17 +88,21 @@ test('blank, whitespace, null and object values count as absent', () => {
 
 test('with no field the HTML is byte-identical to a payload that never had the keys', () => {
   const without = build(basePayload());
-  const blank = build(basePayload({ nationality: '', work_permit: '  ', date_of_birth: null }));
+  const blank = build(basePayload({ address: '  ', nationality: '', work_permit: '  ', date_of_birth: null }));
   assert.equal(blank, without);
 });
 
-test('markdown shows the address in place of the location and a personal line after the contact line', () => {
+test('markdown puts the address first on the personal line and drops it, and the location, from the contact line', () => {
   const md = build(basePayload({ address: 'Rue Exemple 1, 68000 Colmar', nationality: 'Nationality: French', date_of_birth: 'Date of birth: 01.02.1990' }), ['--markdown']);
   const lines = md.split('\n');
   const contact = lines.findIndex((l) => l.includes('jane@example.com'));
-  assert.match(lines[contact], /Rue Exemple 1, 68000 Colmar/);
-  assert.doesNotMatch(lines[contact], /Colmar, France/);
-  assert.equal(lines[contact + 2], 'Nationality: French | Date of birth: 01.02.1990');
+  assert.doesNotMatch(lines[contact], /Rue Exemple 1|Colmar, France/);
+  assert.equal(lines[contact + 2], 'Rue Exemple 1, 68000 Colmar | Nationality: French | Date of birth: 01.02.1990');
+});
+
+test('markdown with an address and no other field still gets a personal line', () => {
+  const md = build(basePayload({ address: 'Rue Exemple 1, 68000 Colmar' }), ['--markdown']);
+  assert.match(md, /\nRue Exemple 1, 68000 Colmar\n/);
 });
 
 test('markdown has no personal line when every field is blank', () => {
