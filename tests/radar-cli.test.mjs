@@ -198,6 +198,25 @@ test('--coverage reports recall against the scan-history baseline', () => {
   assert.deepEqual(out.missing, ['Beta SAS']);
 });
 
+test('a census --write keeps tier, override, spontaneous and notes cells and adds the new columns', () => {
+  const root = sandbox();
+  assert.equal(radar(root, ['--source', 'ats-employers', '--write']).status, 0);
+  const first = parseRegistry(readFileSync(registryFile(root), 'utf-8'));
+  const target = first.rows[0];
+  Object.assign(target, { tier: '1', tier_reason: 'tier 1: x', tier_override: 'out', spontaneous: 'drafted:2026-10-20', notes: 'x' });
+  writeFileSync(registryFile(root), serializeRegistry(first));
+  const r = radar(root, ['--source', 'ats-employers', '--write']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(receipt(r).prospects, { new: 0, known: 2, total: 2 });
+  const after = parseRegistry(readFileSync(registryFile(root), 'utf-8'));
+  const kept = after.rows.find((p) => p['key'] === target['key']);
+  assert.deepEqual(
+    [kept.tier, kept.tier_reason, kept.tier_override, kept.spontaneous, kept.notes],
+    ['1', 'tier 1: x', 'out', 'drafted:2026-10-20', 'x'],
+  );
+  assert.deepEqual(after.columns.slice(-4), ['tier', 'tier_reason', 'tier_override', 'spontaneous']);
+});
+
 test('--coverage without any registry or history is an empty baseline, not an error', () => {
   const root = sandbox({ withHistory: false });
   const r = radar(root, ['--coverage']);
