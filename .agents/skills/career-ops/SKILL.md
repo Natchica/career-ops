@@ -8,7 +8,7 @@ description: >-
 arguments: mode
 user_invocable: true
 user-invocable: true
-argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | triage | batch | tracker | agent-inbox | pipeline | contacto | cabinet | radar | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
+argument-hint: "[scan | discover | deep | pdf | ats | text | latex | latex-tex | cover | email | add | expand | eu-swe | oferta | ofertas | apply | triage | batch | tracker | agent-inbox | pipeline | contacto | cabinet | radar | spontaneous | training | project | interview-prep | interview | master-profile | intake | retro | interview/plan | interview/practice | interview/debrief | interview-redflag | patterns | calibrate | offer-prep | titles | upskill | followup | reply-watch | outcome | update]"
 license: MIT
 ---
 
@@ -55,6 +55,7 @@ Determine the mode from `$mode`:
 | `cabinet` | `cabinet` |
 | `headhunter` | `cabinet` |
 | `radar` | `radar` |
+| `spontaneous` | `spontaneous` |
 | `deep` | `deep` |
 | `interview-prep` | `interview-prep` |
 | `interview` | `interview` |
@@ -159,6 +160,7 @@ Available commands:
   /career-ops contacto  → LinkedIn power move: find contacts + draft message
   /career-ops cabinet   → Search firms: discover, vet, brief, contact, mandate, status (draft-only)
   /career-ops radar     → Census of the employers in your commute zones (names companies, nothing else)
+  /career-ops spontaneous → Daily Spontaneous application to a Tier 1 Prospect (draft only)
   /career-ops deep      → Deep research prompt about company
   /career-ops interview-prep → Generate company-specific interview prep doc
   /career-ops interview    → Interactive profile/CV onboarding interview
@@ -214,7 +216,7 @@ Resolve `language.modes_dir` before applying the path shorthand below. With no s
 
 Read the resolved shared context (default `modes/_shared.md`) + `modes/_profile.md` (if exists) + `modes/_custom.md` (if exists) + the resolved selected mode file (default `modes/{mode}.md`). For an A-F evaluation, that selected file is the primary directory's evaluation mode; do not also load an evaluation file from a secondary directory.
 
-Applies to: `auto-pipeline`, `oferta`, `ofertas`, `pdf`, `text`, `contacto`, `apply`, `pipeline`, `scan`, `batch`
+Applies to: `auto-pipeline`, `oferta`, `ofertas`, `pdf`, `text`, `contacto`, `spontaneous`, `apply`, `pipeline`, `scan`, `batch`
 
 ### Standalone modes with profile and custom context
 
