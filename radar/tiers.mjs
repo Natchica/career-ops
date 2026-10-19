@@ -214,3 +214,20 @@ export function formatSpontaneous({ state, date, tracker, why }) {
   if (state === 'skipped' && why) return `skipped:${date}:${why}`;
   return `${state}:${date}`;
 }
+
+/**
+ * The Prospects `discover-ats.mjs --from-radar` should probe for an ATS board:
+ * tier 1 or 2, no board yet, optionally with a site in one of `zones`, in tier
+ * order, at most `limit`.
+ */
+export function selectForDiscovery(rows, rules, { zones = null, limit = 20 } = {}) {
+  const wanted = Array.isArray(zones) && zones.length ? new Set(zones) : null;
+  const hasBoard = (p) => (p.portals_ref && p.portals_ref !== '—')
+    || String(p.sources ?? '').split(';').map((s) => s.trim()).includes('ats-employers:board');
+  const inZone = (p) => !wanted
+    || String(p.sites ?? '').split(';').some((site) => wanted.has(site.split(':').pop()?.trim()));
+  return rows
+    .filter((p) => (p.tier === '1' || p.tier === '2') && !hasBoard(p) && inZone(p))
+    .sort((a, b) => (a.tier === b.tier ? compareProspects(a, b, rules) : a.tier < b.tier ? -1 : 1))
+    .slice(0, limit);
+}
