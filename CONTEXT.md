@@ -46,6 +46,10 @@ _Avoid_: opportunity, match (the email sender's word), offer (reserved for an ev
 A company recorded in the radar registry (`data/radar.tsv`) because it has at least one site in a target commute zone. A Prospect is not evaluated, not approached and not necessarily hiring; it may have no scannable board and no posting.
 _Avoid_: lead (a posting URL), target (implies the candidate chose it), company entry, account
 
+**Tier**:
+The rank 1, 2, 3 or out that `radar-tiers.mjs` gives a Prospect from its zone, country, tech signals and size, with a recorded reason. A Tier decides which Prospects a Spontaneous application may start from; it says nothing about whether the company is hiring.
+_Avoid_: score (reserved for evaluated postings), priority, grade
+
 **Radar**:
 The census tool and registry that enumerates Prospects from registers, job-board employer mining, startup directories and GitHub orgs. It names companies and does nothing else with them.
 _Avoid_: discover (the ATS board resolver `discover-ats.mjs`, which consumes names the Radar produces)
