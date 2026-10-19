@@ -5,7 +5,7 @@ import { ArrowUpDown, ChevronLeft, ChevronRight, CircleAlert, Search, Sparkles, 
 import { CopyableCommand } from "@/components/copyable-command";
 import { cn } from "@/lib/cn";
 import type { RadarResult } from "@/lib/core/radar";
-import { SIZE_BANDS, signalLevel, zoneTone, ZONE_TONES } from "@/lib/radar-presentation.mjs";
+import { SIZE_BANDS, signalLevel, stateTone, tierTone, zoneTone, ZONE_TONES } from "@/lib/radar-presentation.mjs";
 import { radarSearchString } from "@/lib/radar-query.mjs";
 
 type Ok = Extract<RadarResult, { state: "ok" }>;
@@ -62,10 +62,10 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
   const update = (patch: Partial<Query>) => setQuery({ ...query, ...patch, page: patch.page ?? 1 });
   const toggleZone = (z: string) => update({ zones: query.zones.includes(z) ? query.zones.filter((x: string) => x !== z) : [...query.zones, z] });
   const latestOnly = summary.latestRun !== null && query.since === summary.latestRun;
-  const filtered = query.zones.length > 0 || !!query.country || !!query.source || !!query.sizeBand || query.minSignals > 0 || !!query.since || !!query.q;
+  const filtered = query.zones.length > 0 || !!query.country || !!query.source || !!query.sizeBand || query.minSignals > 0 || !!query.since || !!query.tier || !!query.state || !!query.q;
   const clear = () => {
     setText("");
-    setQuery({ ...query, zones: [], country: null, source: null, sizeBand: null, minSignals: 0, since: null, q: "", page: 1 });
+    setQuery({ ...query, zones: [], country: null, source: null, sizeBand: null, minSignals: 0, since: null, tier: null, state: null, q: "", page: 1 });
   };
   const sortBy = (sort: string) =>
     update(query.sort === sort ? { sort, dir: query.dir === "asc" ? "desc" : "asc", page: 1 } : { sort, dir: undefined as never, page: 1 });
@@ -123,6 +123,15 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
 
       {coverage}
 
+      {summary.byTier["none"] === summary.total && (
+        <div className="mt-5 rounded-2xl border border-border bg-surface/40 p-4 text-sm text-muted">
+          <p>Prospects are not ranked yet. Run this once, and again after every census run:</p>
+          <div className="mt-2">
+            <CopyableCommand command="node radar-tiers.mjs --write --summary" />
+          </div>
+        </div>
+      )}
+
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <label className="relative">
           <span className="sr-only">Search companies</span>
@@ -155,6 +164,18 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
           <option value={0}>Any signals</option>
           {[1, 2, 3, 4].map((n) => (<option key={n} value={n}>{n}+ signals</option>))}
         </select>
+        <select aria-label="Tier" value={query.tier ?? ""} onChange={(e) => update({ tier: (e.target.value || null) as Query["tier"] })} className={inputClass}>
+          <option value="">Any tier</option>
+          {(["1", "2", "3", "out", "none"] as const).map((t) => (
+            <option key={t} value={t}>{tierTone(t).label} ({summary.byTier[t].toLocaleString()})</option>
+          ))}
+        </select>
+        <select aria-label="Application state" value={query.state ?? ""} onChange={(e) => update({ state: (e.target.value || null) as Query["state"] })} className={inputClass}>
+          <option value="">Any state</option>
+          {(["none", "drafted", "sent", "skipped"] as const).map((st) => (
+            <option key={st} value={st}>{stateTone(st).label} ({summary.bySpontaneous[st].toLocaleString()})</option>
+          ))}
+        </select>
         {filtered && (
           <button type="button" onClick={clear} className="rounded-full px-3 py-1.5 text-sm font-medium text-brand hover:underline">
             Clear filters
@@ -184,6 +205,7 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
                   </button>
                 </th>
               ))}
+              <th scope="col" className="px-4 py-2.5 font-medium">Tier</th>
               <th scope="col" className="hidden px-4 py-2.5 font-medium lg:table-cell">Sources</th>
             </tr>
           </thead>
@@ -224,6 +246,24 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
                     </span>
                   </td>
                   <td className="hidden px-4 py-2.5 tabular-nums text-muted md:table-cell">{row.firstSeen}</td>
+                  <td className="px-4 py-2.5">
+                    <span
+                      className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-bold", tierTone(row.tier).chip)}
+                      title={row.tierReason || tierTone(row.tier).sr}
+                    >
+                      {tierTone(row.tier).label}
+                      <span className="sr-only"> {tierTone(row.tier).sr}</span>
+                    </span>
+                    {row.spontaneous.state !== "none" && (
+                      <p className="mt-1">
+                        <span className={cn("inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium", stateTone(row.spontaneous.state).chip)}>
+                          {stateTone(row.spontaneous.state).label}
+                          {row.spontaneous.state === "sent" && row.spontaneous.tracker ? ` #${row.spontaneous.tracker}` : ""}
+                          {row.spontaneous.date ? ` ${row.spontaneous.date}` : ""}
+                        </span>
+                      </p>
+                    )}
+                  </td>
                   <td className="hidden px-4 py-2.5 lg:table-cell">
                     <div className="flex flex-wrap gap-1">
                       {row.sources.filter((s: string) => !s.includes(":")).map((s: string) => (
@@ -236,7 +276,7 @@ export function RadarView({ initial, coverage }: { initial: RadarResult; coverag
             })}
             {page.rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   No prospect matches these filters.{" "}
                   <button type="button" onClick={clear} className="font-medium text-brand hover:underline">Clear filters</button>
                 </td>
