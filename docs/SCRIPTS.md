@@ -323,6 +323,40 @@ The same runs are available on the web app's Radar page, where Save needs a fres
 
 ---
 
+## radar-tiers
+
+Ranks every Prospect in `data/radar.tsv` into tier 1, 2, 3 or out, with a recorded reason. No network and no model: it applies `templates/radar-tiers.yml` (override `config/radar-tiers.yml`) to columns the registry already holds. A hand-set `tier_override` wins and is never rewritten.
+
+```bash
+node radar-tiers.mjs --summary           # preview: counts per tier and reason, tier 1 by zone and country
+node radar-tiers.mjs --write --summary   # persist tier and tier_reason
+node radar-tiers.mjs --explain acme      # rule trace and rank inside the tier for one Prospect
+```
+
+Re-run `--write` after every `radar.mjs --write`: new rows have no tier yet. A second `--write` on an unchanged registry reports `"changed": 0`.
+
+**Exit codes:** `0` on success; `1` on a usage error, a missing registry, a malformed `data/radar.tsv` or an unparseable rule file; `2` when `--explain` names an unknown key.
+
+---
+
+## spontaneous-pick
+
+The zero-model half of the `spontaneous` mode. `next` lists the best untouched tier 1 (then tier 2) Prospects and never writes. `mark` changes only the `spontaneous` cell of one row, under the registry lock.
+
+```bash
+node spontaneous-pick.mjs next --summary                  # 3 picks, excluded counts, untiered and stale warnings
+node spontaneous-pick.mjs next --count 5                  # 1 to 10 picks (JSON)
+node spontaneous-pick.mjs mark "acme" drafted             # drafted:YYYY-MM-DD
+node spontaneous-pick.mjs mark "acme" skipped --reason "no public info"
+node spontaneous-pick.mjs mark "acme" sent --tracker 123  # sent:YYYY-MM-DD:#123, checked against the tracker row
+```
+
+A Prospect is skipped by `next` when its `spontaneous` cell is not empty, its company is in the tracker, or it is in `data/blacklist.md`. `sent` is final, and `skipped` cannot become `sent`.
+
+**Exit codes:** `0` on success; `1` on a usage error or a missing registry; `2` for an unknown key or a tracker row that is missing or belongs to another company; `3` for a refused transition.
+
+---
+
 ## pdf
 
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
