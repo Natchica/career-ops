@@ -6,9 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as yaml from 'js-yaml';
-import { RadarConfigError } from './zones.mjs';
+import { RadarConfigError, foldName, loadZoneTable } from './zones.mjs';
 
 const ZONES = ['A', 'B', 'C', 'D'];
+const FOCUS_COUNTRIES = ['CH', 'FR', 'DE'];
 const FLOOR_CODE = /^\d{2}\.\d{2}[A-Z]$/;
 const DIVISION = /^\d{2}$/;
 const KNOWN_BANDS = ['10000+', '5000-9999', '2000-4999', '1000-1999', '500-999', '250-499', '200-249', '100-199', '50-99', '20-49', '10-19', '?', '6-9', '3-5', '1-2'];
@@ -55,8 +56,12 @@ function buildRules(doc, source) {
     fail('order.size_bands must list each known band exactly once');
   }
 
+  const focus = doc.focus_country ?? null;
+  if (focus !== null && !FOCUS_COUNTRIES.includes(focus)) fail(`focus_country must be one of ${FOCUS_COUNTRIES.join(', ')}, got "${focus}"`);
+
   return {
     version: 1,
+    focusCountry: focus,
     floor: floor.map((f) => ({ code: String(f.code), label: String(f.label ?? '') })),
     blacklist: hard.blacklist !== false,
     divisions: divisions.map((d) => ({ division: String(d.division), label: String(d.label ?? '') })),
@@ -88,19 +93,42 @@ export function loadTierRules({ dataRoot, codeRoot }) {
   } catch (e) {
     throw new RadarConfigError(`${source}: ${e.message}`);
   }
-  return { ...buildRules(doc, source), source };
+  const rules = { ...buildRules(doc, source), source, focusPlaces: null };
+  if (rules.focusCountry) rules.focusPlaces = placesIn(rules.focusCountry, loadZoneTable({ dataRoot, codeRoot }));
+  return rules;
+}
+
+/**
+ * Folded names of the zone-table places that belong to `country`. A name the
+ * table also gives to a place in another country is left out, so a shared name
+ * never counts as a site in the focus country.
+ */
+function placesIn(country, table) {
+  const inside = new Set();
+  const outside = new Set();
+  for (const place of table.places) {
+    const bucket = place.country === country ? inside : outside;
+    for (const label of [place.name, ...place.aliases]) {
+      const key = foldName(label);
+      if (key) bucket.add(key);
+    }
+  }
+  for (const key of outside) inside.delete(key);
+  return inside;
 }
 
 const NAF_CODE = /^\d{2}\.\d{2}[A-Z]/;
 const sectorToken = (row) => String(row.sector ?? '').trim().split(/\s+/)[0] ?? '';
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** Smallest zone letter among the row's `place:zone` sites that is inside the pool, or null. */
+/** Smallest zone letter among the row's `place:zone` sites that is inside the pool (and in the focus country, when set), or null. */
 export function bestZone(row, rules) {
   let best = null;
   for (const site of String(row.sites ?? '').split(';')) {
-    const zone = site.split(':').pop()?.trim();
+    const at = site.lastIndexOf(':');
+    const zone = site.slice(at + 1).trim();
     if (!rules.poolZones.includes(zone)) continue;
+    if (rules.focusPlaces && !rules.focusPlaces.has(foldName(site.slice(0, at)))) continue;
     if (best === null || zone < best) best = zone;
   }
   return best;
@@ -147,7 +175,10 @@ export function classify(row, rules, { isBlacklisted = () => false } = {}) {
 
   const zone = bestZone(row, rules);
   note('zone', tier ? 'skipped' : zone ? 'pass' : 'unknown', zone ?? '');
-  if (!tier && !zone) { tier = '3'; reason = 'unknown: no zone A-D'; }
+  if (!tier && !zone) {
+    tier = '3';
+    reason = rules.focusCountry ? `tier 3: no ${rules.focusCountry} site` : 'unknown: no zone A-D';
+  }
 
   const signals = Number.parseInt(row.signals, 10) || 0;
   const match = tier ? undefined : rules.tiers.find((t) => signals >= t.minSignals);
