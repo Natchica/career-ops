@@ -20,6 +20,7 @@ import { escapeFormulaCell, unescapeFormulaCell } from '../lib/tsv-formula-escap
 export const RADAR_COLUMNS = Object.freeze([
   'key', 'name', 'aliases', 'sites', 'country', 'sector', 'size_band', 'signals',
   'sources', 'first_seen', 'last_seen', 'portals_ref', 'notes',
+  'tier', 'tier_reason', 'tier_override', 'spontaneous',
 ]);
 
 const STALE_LOCK_MS = 30 * 60 * 1000;
@@ -125,6 +126,28 @@ export async function writeRegistry(path, reg) {
   acquireLock(lockPath);
   try {
     atomicWriteFile(path, text);
+  } finally {
+    try { unlinkSync(lockPath); } catch { /* already gone */ }
+  }
+}
+
+/**
+ * Read-modify-write under the lock: the registry is re-read after the lock is
+ * taken, so a writer that finished during a long sweep is never overwritten with
+ * rows read before it. `mutate` gets the fresh `{columns, rows}` and returns
+ * `{columns?, rows, result?}`; a throw leaves the file untouched.
+ *
+ * @returns whatever `mutate` put in `result`
+ */
+export async function updateRegistry(path, mutate) {
+  mkdirSync(dirname(path), { recursive: true });
+  const lockPath = `${path}.lock`;
+  acquireLock(lockPath);
+  try {
+    const fresh = readRegistry(path);
+    const out = await mutate({ columns: fresh.columns, rows: fresh.rows });
+    atomicWriteFile(path, serializeRegistry({ columns: out.columns ?? fresh.columns, rows: out.rows }));
+    return out.result;
   } finally {
     try { unlinkSync(lockPath); } catch { /* already gone */ }
   }
