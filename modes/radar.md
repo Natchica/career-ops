@@ -124,6 +124,8 @@ Run `--write` again after every `radar.mjs --write`: new rows have no tier yet, 
 
 ## Zone table
 
+The shipped table is anchored on Colmar and rail times. A different home base needs its own table in `config/radar-zones.yml`, built from door-to-door times from the new anchor and the band limits in `modes/_brief.md`. Each registry site stores its zone letter at census time, so after changing the table every existing row must be re-zoned: map each `place:zone` through the new table, drop sites whose place is now out of range, then run `radar-tiers.mjs --write`. There is no command for the re-zone pass yet. Rows left with no in-range site stay in the registry and rank as tier 3.
+
 `templates/radar-zones.yml` maps places and postcodes to zones A to D. To change it, copy it to `config/radar-zones.yml`: a missing copy falls back to the template, an unparseable one is an error and never falls back.
 
 ## Adding a source
