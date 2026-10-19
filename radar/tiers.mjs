@@ -1,0 +1,210 @@
+/**
+ * Tier rules for the radar registry: load the rule file, never touch the network.
+ * A present override that fails to parse or has the wrong shape throws
+ * RadarConfigError and never falls back, so a broken user file stays visible.
+ */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import * as yaml from 'js-yaml';
+import { RadarConfigError } from './zones.mjs';
+
+const ZONES = ['A', 'B', 'C', 'D'];
+const FLOOR_CODE = /^\d{2}\.\d{2}[A-Z]$/;
+const DIVISION = /^\d{2}$/;
+const KNOWN_BANDS = ['10000+', '5000-9999', '2000-4999', '1000-1999', '500-999', '250-499', '200-249', '100-199', '50-99', '20-49', '10-19', '?', '6-9', '3-5', '1-2'];
+
+const isList = (v) => Array.isArray(v);
+
+function buildRules(doc, source) {
+  const fail = (msg) => { throw new RadarConfigError(`${source}: ${msg}`); };
+  if (!doc || typeof doc !== 'object') fail('expected a mapping');
+  if (doc.version !== 1) fail(`unsupported version "${doc.version}"`);
+
+  const hard = doc.hard_out;
+  if (!hard || typeof hard !== 'object') fail('missing hard_out');
+  const floor = hard.floor ?? [];
+  if (!isList(floor)) fail('hard_out.floor must be a list');
+  for (const f of floor) {
+    if (!FLOOR_CODE.test(String(f?.code ?? ''))) fail(`floor code "${f?.code}" is not a NAF code like 25.40Z`);
+  }
+  const divisions = hard.divisions ?? [];
+  if (!isList(divisions)) fail('hard_out.divisions must be a list');
+  for (const d of divisions) {
+    if (!DIVISION.test(String(d?.division ?? ''))) fail(`division "${d?.division}" is not 2 digits`);
+  }
+  const sizeBands = hard.size_bands ?? [];
+  if (!isList(sizeBands) || sizeBands.some((b) => !KNOWN_BANDS.includes(b))) fail('hard_out.size_bands holds an unknown band');
+
+  const poolZones = doc.pool_zones;
+  if (!isList(poolZones) || poolZones.length === 0 || poolZones.some((z) => !ZONES.includes(z))) {
+    fail('pool_zones must be a non-empty subset of A, B, C, D');
+  }
+
+  const tiers = doc.tiers;
+  if (!isList(tiers) || tiers.length === 0) fail('tiers must be a non-empty list');
+  for (const t of tiers) {
+    if (![1, 2, 3].includes(t?.tier) || !Number.isInteger(t?.min_signals) || t.min_signals < 0) fail('each tier needs tier 1-3 and min_signals >= 0');
+  }
+
+  const order = doc.order;
+  if (!order || typeof order !== 'object') fail('missing order');
+  if (!isList(order.zones) || order.zones.some((z) => !ZONES.includes(z))) fail('order.zones must list zones A-D');
+  if (!isList(order.countries) || order.countries.some((g) => !isList(g))) fail('order.countries must be a list of country groups');
+  const bands = order.size_bands;
+  if (!isList(bands) || bands.length !== KNOWN_BANDS.length || KNOWN_BANDS.some((b) => bands.filter((x) => x === b).length !== 1)) {
+    fail('order.size_bands must list each known band exactly once');
+  }
+
+  return {
+    version: 1,
+    floor: floor.map((f) => ({ code: String(f.code), label: String(f.label ?? '') })),
+    blacklist: hard.blacklist !== false,
+    divisions: divisions.map((d) => ({ division: String(d.division), label: String(d.label ?? '') })),
+    hardOutSizes: [...sizeBands],
+    poolZones: [...poolZones],
+    tiers: tiers.map((t) => ({ tier: t.tier, minSignals: t.min_signals })),
+    order: { zones: [...order.zones], countries: order.countries.map((g) => [...g]), sizeBands: [...bands] },
+  };
+}
+
+/**
+ * @param {{dataRoot: string, codeRoot: string}} roots
+ * @returns the validated rules, with `source` naming the file they came from
+ */
+export function loadTierRules({ dataRoot, codeRoot }) {
+  const overridePath = join(dataRoot, 'config', 'radar-tiers.yml');
+  let text;
+  let source = overridePath;
+  try {
+    text = readFileSync(overridePath, 'utf-8');
+  } catch (e) {
+    if (e?.code !== 'ENOENT') throw new RadarConfigError(`${overridePath}: ${e.message}`);
+    source = join(codeRoot, 'templates', 'radar-tiers.yml');
+    text = readFileSync(source, 'utf-8');
+  }
+  let doc;
+  try {
+    doc = yaml.load(text);
+  } catch (e) {
+    throw new RadarConfigError(`${source}: ${e.message}`);
+  }
+  return { ...buildRules(doc, source), source };
+}
+
+const NAF_CODE = /^\d{2}\.\d{2}[A-Z]/;
+const sectorToken = (row) => String(row.sector ?? '').trim().split(/\s+/)[0] ?? '';
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Smallest zone letter among the row's `place:zone` sites that is inside the pool, or null. */
+export function bestZone(row, rules) {
+  let best = null;
+  for (const site of String(row.sites ?? '').split(';')) {
+    const zone = site.split(':').pop()?.trim();
+    if (!rules.poolZones.includes(zone)) continue;
+    if (best === null || zone < best) best = zone;
+  }
+  return best;
+}
+
+const VALID_OVERRIDES = new Set(['1', '2', '3', 'out']);
+
+/**
+ * Rank one Prospect. Hard-outs run first, in the rule file's order; the first
+ * match is the recorded reason. A valid `tier_override` wins over the result.
+ *
+ * @returns {{tier: '1'|'2'|'3'|'out', reason: string, invalidOverride: boolean,
+ *            trace: {rule: string, result: string, detail: string}[]}}
+ */
+export function classify(row, rules, { isBlacklisted = () => false } = {}) {
+  const trace = [];
+  const note = (rule, result, detail = '') => trace.push({ rule, result, detail });
+  const token = sectorToken(row);
+  const size = String(row.size_band ?? '').trim() || '?';
+  let tier = null;
+  let reason = '';
+
+  const floor = rules.floor.find((f) => f.code === token);
+  note('floor', floor ? 'out' : 'pass', floor ? floor.code : '');
+  if (floor) { tier = 'out'; reason = `out floor: ${floor.code} ${floor.label}`; }
+
+  const listed = rules.blacklist && !tier && isBlacklisted(row);
+  note('blacklist', listed ? 'out' : 'pass');
+  if (listed) { tier = 'out'; reason = `out blacklist: ${row.name}`; }
+
+  const division = NAF_CODE.test(token) ? rules.divisions.find((d) => d.division === token.slice(0, 2)) : undefined;
+  note('sector', tier ? 'skipped' : division ? 'out' : 'pass', division?.division ?? '');
+  if (!tier && division) { tier = 'out'; reason = `out sector: ${division.division} ${division.label}`; }
+
+  const smallSize = rules.hardOutSizes.includes(size);
+  note('size', tier ? 'skipped' : smallSize ? 'out' : 'pass', size);
+  if (!tier && smallSize) { tier = 'out'; reason = `out size: ${size}`; }
+
+  const zone = bestZone(row, rules);
+  note('zone', tier ? 'skipped' : zone ? 'pass' : 'unknown', zone ?? '');
+  if (!tier && !zone) { tier = '3'; reason = 'unknown: no zone A-D'; }
+
+  const signals = Number.parseInt(row.signals, 10) || 0;
+  const match = tier ? undefined : rules.tiers.find((t) => signals >= t.minSignals);
+  note('tier', tier ? 'skipped' : match ? String(match.tier) : '3', `${signals} signals`);
+  if (!tier) {
+    tier = match ? String(match.tier) : '3';
+    reason = `tier ${tier}: zone ${zone}, ${row.country}, ${plural(signals, 'signal')}`;
+    if (size === '?') reason += '; size ?';
+    if (!String(row.sector ?? '').trim()) reason += '; no NAF code';
+  }
+
+  const given = String(row.tier_override ?? '').trim();
+  const valid = VALID_OVERRIDES.has(given);
+  if (valid) {
+    reason = `override: ${given} (rules: ${tier}, ${reason})`;
+    tier = given;
+  }
+  return { tier, reason, invalidOverride: given !== '' && !valid, trace };
+}
+
+const indexOrEnd = (list, value) => { const i = list.indexOf(value); return i === -1 ? list.length : i; };
+const groupIndex = (groups, country) => { const i = groups.findIndex((g) => g.includes(country)); return i === -1 ? groups.length : i; };
+const signalCount = (p) => Number.parseInt(p.signals, 10) || 0;
+
+/** Order two Prospects of one tier: zone, country group, signals, size, then key. */
+export function compareProspects(a, b, rules) {
+  const za = indexOrEnd(rules.order.zones, bestZone(a, rules));
+  const zb = indexOrEnd(rules.order.zones, bestZone(b, rules));
+  if (za !== zb) return za - zb;
+  const ca = groupIndex(rules.order.countries, a.country);
+  const cb = groupIndex(rules.order.countries, b.country);
+  if (ca !== cb) return ca - cb;
+  if (signalCount(a) !== signalCount(b)) return signalCount(b) - signalCount(a);
+  const sa = indexOrEnd(rules.order.sizeBands, String(a.size_band || '?'));
+  const sb = indexOrEnd(rules.order.sizeBands, String(b.size_band || '?'));
+  if (sa !== sb) return sa - sb;
+  return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Parse a `spontaneous` cell: `drafted:D`, `skipped:D[:why]` or `sent:D:#N`.
+ * @returns {{state: 'none'|'drafted'|'skipped'|'sent'|'invalid', date?: string, tracker?: number, why?: string}}
+ */
+export function parseSpontaneous(cell) {
+  const text = String(cell ?? '').trim();
+  if (text === '') return { state: 'none' };
+  const [state, date, ...rest] = text.split(':');
+  if (!DATE.test(date ?? '')) return { state: 'invalid' };
+  const tail = rest.join(':');
+  if (state === 'drafted' && rest.length === 0) return { state, date };
+  if (state === 'skipped') return tail ? { state, date, why: tail } : { state, date };
+  if (state === 'sent') {
+    const m = /^#(\d+)$/.exec(tail);
+    return m ? { state, date, tracker: Number(m[1]) } : { state: 'invalid' };
+  }
+  return { state: 'invalid' };
+}
+
+export function formatSpontaneous({ state, date, tracker, why }) {
+  if (state === 'none') return '';
+  if (state === 'sent') return `sent:${date}:#${tracker}`;
+  if (state === 'skipped' && why) return `skipped:${date}:${why}`;
+  return `${state}:${date}`;
+}
