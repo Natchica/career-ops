@@ -110,6 +110,10 @@ Inside a tier the order is best zone, then Swiss before French and German, then 
 
 Run `--write` again after every `radar.mjs --write`: new rows have no tier yet, and `spontaneous-pick.mjs next` warns about `untiered` and stale rows until you do.
 
+## From Prospect to board
+
+`node discover-ats.mjs --from-radar --zone A,B --limit 20 --summary` takes the best tier 1 and 2 Prospects that have no board and probes Greenhouse, Ashby, Lever and the other public ATS APIs for each. It previews by default; `--write` appends the resolved ones to `portals.yml`, after which `scan` produces Leads for them and the next `radar.mjs --write` fills `portals_ref`. The `--from-radar` flag is a fork edit to `discover-ats.mjs`, a system file, so `update-system apply` overwrites it.
+
 ## Daily use
 
 `spontaneous` (see `modes/spontaneous.md`) turns the best untouched tier 1 Prospect into one draft Spontaneous application: live research on that company only, an HR or engineering contact, a no-JD CV and an email. Draft only; nothing is sent.
