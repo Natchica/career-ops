@@ -9,6 +9,36 @@
 const SORTS = new Set(["name", "zone", "size_band", "signals", "first_seen"]);
 const DEFAULT_DIR = { name: "asc", zone: "asc", size_band: "desc", signals: "desc", first_seen: "desc" };
 const COUNTRIES = new Set(["CH", "FR", "DE"]);
+const TIERS = new Set(["1", "2", "3", "out", "none"]);
+const STATES = new Set(["none", "drafted", "skipped", "sent"]);
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The state of a `spontaneous` cell: none, drafted, skipped, sent, or invalid.
+ * A copy of the engine's `parseSpontaneous` (radar/tiers.mjs) because the web
+ * never imports the engine at build time; a parity test holds the two together.
+ */
+export function spontaneousStateOf(cell) {
+  const text = String(cell ?? "").trim();
+  if (text === "") return "none";
+  const [state, date, ...rest] = text.split(":");
+  if (!DATE.test(date ?? "")) return "invalid";
+  if (state === "drafted") return rest.length === 0 ? "drafted" : "invalid";
+  if (state === "skipped") return "skipped";
+  if (state === "sent") return /^#\d+$/.test(rest.join(":")) ? "sent" : "invalid";
+  return "invalid";
+}
+
+/** @returns {{state: string, date?: string, tracker?: number}} */
+function spontaneousView(cell) {
+  const state = spontaneousStateOf(cell);
+  const [, date, ...rest] = String(cell ?? "").trim().split(":");
+  /** @type {{state: string, date?: string, tracker?: number}} */
+  const view = { state: state === "invalid" ? "none" : state };
+  if (state === "drafted" || state === "skipped" || state === "sent") view.date = date;
+  if (state === "sent") view.tracker = Number(rest.join(":").slice(1));
+  return view;
+}
 const ZONE_LETTERS = ["A", "B", "C", "D"];
 const BAND_RANK = new Map(
   ["?", "1-2", "3-5", "6-9", "10-19", "20-49", "50-99", "100-199", "200-249", "250-499", "500-999", "1000-1999", "2000-4999", "5000-9999", "10000+"]
@@ -51,6 +81,8 @@ export function parseRadarQuery(params) {
     sizeBand: (params.get("sizeBand") ?? "").trim().slice(0, 12) || null,
     minSignals: Math.min(4, Math.max(0, intParam(params.get("minSignals"), 0))),
     since,
+    tier: TIERS.has(params.get("tier") ?? "") ? params.get("tier") : null,
+    state: STATES.has(params.get("state") ?? "") ? params.get("state") : null,
     q: (params.get("q") ?? "").trim().slice(0, 80),
   };
 }
@@ -78,6 +110,9 @@ export function toView(row) {
     lastSeen: row.last_seen,
     portalsRef: row.portals_ref && row.portals_ref !== "—" ? row.portals_ref : null,
     notes: row.notes ?? "",
+    tier: row.tier || "none",
+    tierReason: row.tier_reason ?? "",
+    spontaneous: spontaneousView(row.spontaneous),
   };
 }
 
@@ -93,6 +128,8 @@ function matches(row, query, needle) {
   if (query.sizeBand && (row.size_band || "?") !== query.sizeBand) return false;
   if (query.since && !(row.first_seen >= query.since)) return false;
   if (query.source && !split(row.sources).includes(query.source)) return false;
+  if (query.tier && (row.tier || "none") !== query.tier) return false;
+  if (query.state && spontaneousStateOf(row.spontaneous) !== query.state) return false;
   if (query.zones.length) {
     const zones = rowZones(row);
     if (!query.zones.some((z) => zones.includes(z))) return false;
@@ -155,6 +192,8 @@ export function queryProspects(rows, query) {
  */
 export function summarize(rows) {
   const byZone = { A: 0, B: 0, C: 0, D: 0 };
+  const byTier = { 1: 0, 2: 0, 3: 0, out: 0, none: 0 };
+  const bySpontaneous = { none: 0, drafted: 0, skipped: 0, sent: 0 };
   /** @type {Record<string, number>} */
   const byCountry = {};
   /** @type {Record<string, number>} */
@@ -164,10 +203,13 @@ export function summarize(rows) {
     for (const z of new Set(rowZones(row))) if (z in byZone) byZone[z]++;
     for (const src of split(row.sources)) if (!src.includes(":")) bySource[src] = (bySource[src] ?? 0) + 1;
     if (row.country) byCountry[row.country] = (byCountry[row.country] ?? 0) + 1;
+    const tier = row.tier || "none";
+    if (tier in byTier) byTier[tier]++;
+    bySpontaneous[spontaneousView(row.spontaneous).state]++;
     if (row.last_seen && (latestRun === null || row.last_seen > latestRun)) latestRun = row.last_seen;
   }
   const newInLatestRun = latestRun === null ? 0 : rows.filter((r) => r.first_seen === latestRun).length;
-  return { total: rows.length, byZone, byCountry, bySource, latestRun, newInLatestRun };
+  return { total: rows.length, byZone, byTier, bySpontaneous, byCountry, bySource, latestRun, newInLatestRun };
 }
 
 /**
@@ -184,6 +226,8 @@ export function radarSearchString(query) {
   if (query.sizeBand) params.set("sizeBand", query.sizeBand);
   if (query.minSignals) params.set("minSignals", String(query.minSignals));
   if (query.since) params.set("since", query.since);
+  if (query.tier) params.set("tier", query.tier);
+  if (query.state) params.set("state", query.state);
   if (query.q) params.set("q", query.q);
   const sort = query.sort ?? "name";
   if (sort !== "name") params.set("sort", sort);
