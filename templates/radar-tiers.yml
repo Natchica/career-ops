@@ -1,0 +1,48 @@
+# Radar tier rules. Ranks every Prospect in data/radar.tsv into tier 1, 2, 3 or out
+# with a recorded reason. Zero network, zero model: radar-tiers.mjs reads this file.
+#
+# Override: copy this file to {DATA_ROOT}/config/radar-tiers.yml. A missing override
+# falls back to this file; a present but unparseable or ill-shaped override is an error.
+#
+# hard_out, checked in this order, the first match is the recorded reason:
+#   floor       modes/_brief.md "Company sector floor", NAF rev.2 codes only. Payday lending
+#               and authoritarian surveillance have no NAF code and are checked at research time
+#   blacklist   data/blacklist.md, company scope
+#   divisions   NAF rev.2 division, the first 2 digits of the sector code
+#   size_bands  known size bands that cannot employ a developer team
+# pool_zones    zones in the pool. C and D exist only in Switzerland in radar-zones.yml
+# tiers         first match wins; min_signals counts independent tech signals
+# order         inside a tier: best zone, then country group, then signals, then size, then key
+version: 1
+hard_out:
+  floor:
+    - { code: "25.40Z", label: weapons and ammunition }
+    - { code: "30.40Z", label: military fighting vehicles }
+    - { code: "92.00Z", label: gambling and betting }
+  blacklist: true
+  divisions:
+    - { division: "01", label: farming }
+    - { division: "02", label: forestry }
+    - { division: "41", label: building construction }
+    - { division: "43", label: specialised construction }
+    - { division: "45", label: motor trade }
+    - { division: "47", label: retail }
+    - { division: "49", label: land transport }
+    - { division: "55", label: accommodation }
+    - { division: "56", label: restaurants }
+    - { division: "68", label: real estate }
+    - { division: "85", label: education }
+    - { division: "86", label: health practices }
+    - { division: "87", label: residential care }
+    - { division: "88", label: social work }
+    - { division: "93", label: sport and leisure }
+    - { division: "96", label: personal services }
+  size_bands: ["1-2", "3-5"]
+pool_zones: [A, B, C, D]
+tiers:
+  - { tier: 1, min_signals: 1 }
+  - { tier: 2, min_signals: 0 }
+order:
+  zones: [A, B, C, D]
+  countries: [[CH], [FR, DE]]
+  size_bands: ["10000+", "5000-9999", "2000-4999", "1000-1999", "500-999", "250-499", "200-249", "100-199", "50-99", "20-49", "10-19", "?", "6-9", "3-5", "1-2"]
