@@ -80,6 +80,7 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - The **Radar** produces **Prospects**; a **Prospect** may later resolve to a `portals.yml` board, at which point the scanner starts producing **Leads** for it
 - A **Prospect** is one brand or group with its in-zone sites listed; legal entities are aliases, never separate Prospects
 - A **Spontaneous application** targets a **Prospect** directly; it has no **Lead**, its **Via** is `—` (Direct), and it enters the tracker only once it is actually sent
+- A **Spontaneous application** starts from a **Prospect** of **Tier** 1 or 2, one per daily run, chosen by the candidate from the best untouched ones
 - A **Brief** is versioned; the registry records which version each **Cabinet** holds
 
 ## Example dialogue
