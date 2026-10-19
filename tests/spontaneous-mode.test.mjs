@@ -42,6 +42,12 @@ test('the CV step skips the JD steps and does not pass --report', () => {
   assert.doesNotMatch(mode, /--report=\{/);
 });
 
+test('Swiss employers go through the Swiss CV house rule, the checker and the sent copy', () => {
+  assert.ok(mode.includes('verify-swiss-cv.mjs'), 'names the checker');
+  assert.ok(mode.includes('output/send/'), 'names the sent copy folder');
+  assert.ok(mode.includes('modes/_custom.md'), 'points to the house rule');
+});
+
 test('contact details never reach the brief, the tracker or output/', () => {
   assert.match(mode, /never into the brief, the tracker or `output\/`/);
   assert.match(mode, /the contact's type, never their name/);
