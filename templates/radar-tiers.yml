@@ -12,6 +12,9 @@
 #   size_bands  known size bands that cannot employ a developer team
 # pool_zones    zones in the pool. C and D exist only in Switzerland in radar-zones.yml
 # tiers         first match wins; min_signals counts independent tech signals
+# focus_country  optional CH, FR or DE. When set, nearness is measured from the Prospect's best site in
+#               that country only, and a Prospect with no site there is tier 3, which the daily picker
+#               never offers. Unset (the default) counts sites in every country
 # order         inside a tier: best zone, then country group, then signals, then size, then key
 version: 1
 hard_out:
