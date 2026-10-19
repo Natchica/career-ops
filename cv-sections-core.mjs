@@ -231,10 +231,25 @@ export function isEmptyRenderedSection(html, section) {
   return text.trim() === '';
 }
 
+// The Languages slot is a block placeholder (`<!-- LANGUAGES -->` plus
+// `{{LANGUAGES_BLOCK}}`), not a section with a title, so a document that reaches
+// this module with the token still in it was written by an agent that did not
+// fill it (the web pdf path never goes through build-cv-html.mjs). Cut the marker
+// line, the token line and one blank line, as renderHtml in build-cv-html.mjs
+// does for an empty list, and fall back to dropping the bare token, so a literal
+// `{{LANGUAGES_BLOCK}}` can never print on a CV.
+export function stripUnfilledLanguagesSlot(html) {
+  if (!html.includes('{{LANGUAGES_BLOCK}}')) return html;
+  return html
+    .replace(/[ \t]*<!--\s+LANGUAGES\s+-->[ \t]*\n[ \t]*\{\{LANGUAGES_BLOCK\}\}[ \t]*\n(?:[ \t]*\n)?/, '')
+    .replace(/\{\{LANGUAGES_BLOCK\}\}/g, '');
+}
+
 // Remove every optional section that rendered as a bare header. The emptiness
 // map is derived from the document as it arrives, before anything is removed,
 // so one strip cannot change the verdict on the next.
 export function stripEmptyRenderedSections(html) {
+  html = stripUnfilledLanguagesSlot(html);
   const derived = {};
   for (const section of OPTIONAL_SECTIONS) {
     derived[section] = isEmptyRenderedSection(html, section) ? [] : [section];
