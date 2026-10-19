@@ -335,6 +335,8 @@ node radar-tiers.mjs --explain acme      # rule trace and rank inside the tier f
 
 Re-run `--write` after every `radar.mjs --write`: new rows have no tier yet. A second `--write` on an unchanged registry reports `"changed": 0`.
 
+To turn Prospects into scannable boards, `node discover-ats.mjs --from-radar --zone A,B --limit 20 --summary` probes the best tier 1 and 2 Prospects that have no board yet (preview by default; `--write` appends the resolved ones to `portals.yml` as `discover-ats.mjs` always does). `--zone` and `--limit` (1 to 200, default 20) only apply with `--from-radar`, which cannot be combined with `--in` or company names.
+
 **Exit codes:** `0` on success; `1` on a usage error, a missing registry, a malformed `data/radar.tsv` or an unparseable rule file; `2` when `--explain` names an unknown key.
 
 ---
