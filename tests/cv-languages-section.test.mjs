@@ -1,10 +1,12 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { stripEmptyRenderedSections, stripUnfilledLanguagesSlot } from '../cv-sections-core.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const dirs = [];
@@ -191,6 +193,77 @@ test('markdown: without the slot the languages fold into the last skills line', 
 test('markdown: no languages, no section', () => {
   const r = build(basePayload(), { template: slotTemplate(), markdown: true });
   assert.doesNotMatch(r.text, /Languages/);
+});
+
+// ---- the ATS template has the slots too -------------------------------------------
+
+const ATS_DIR = join(ROOT, 'templates', 'ats');
+const ATS_BLOCK = '  <!-- LANGUAGES -->\n  {{LANGUAGES_BLOCK}}\n\n  <!-- INTERESTS -->\n  <div class="section">\n    <div class="section-title">{{SECTION_INTERESTS}}</div>\n    <div class="interests-line">{{INTERESTS}}</div>\n  </div>\n\n';
+const atsTemplate = (transform = (t) => t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'cv-languages-ats-'));
+  dirs.push(dir);
+  cpSync(join(ATS_DIR, 'sections'), join(dir, 'sections'), { recursive: true });
+  const file = join(dir, 'cv-template.ats.html');
+  writeFileSync(file, transform(readFileSync(join(ATS_DIR, 'cv-template.ats.html'), 'utf-8')));
+  return file;
+};
+const atsWithout = (t) => t.replace(ATS_BLOCK, '');
+
+test('ATS template: Languages is its own section between Awards and Skills, with no folded Skills category', () => {
+  const r = build(basePayload({ languages: LANGS, awards: [{ title: 'Prize', org: 'Org', year: '2020' }] }), { template: atsTemplate() });
+  assert.equal(r.status, 0, r.stderr);
+  const order = titles(r.text);
+  assert.equal(order.indexOf('Languages') - 1, order.indexOf('Awards &amp; Honors'), order.join(','));
+  assert.equal(order.indexOf('Languages') + 1, order.indexOf('Skills'), order.join(','));
+  assert.deepEqual(skillLines(r.text.slice(r.text.indexOf('>Skills<'))), ['Programming languages: Rust, Java']);
+});
+
+test('ATS template: Interests renders as its own section instead of being dropped', () => {
+  const r = build(basePayload({ interests: ['Hiking', 'Chess'] }), { template: atsTemplate() });
+  assert.ok(titles(r.text).includes('Interests'));
+  assert.match(r.text, /<div class="interests-line">Hiking, chess<\/div>/);
+});
+
+test('ATS template: no languages and no interests leaves no trace', () => {
+  const never = build(basePayload(), { template: atsTemplate(atsWithout) }).text;
+  const now = build(basePayload(), { template: atsTemplate() }).text;
+  assert.equal(now, never);
+});
+
+test('ATS template markdown: Languages and Interests come before Skills', () => {
+  const r = build(basePayload({ languages: LANGS, interests: ['Hiking'] }), { template: atsTemplate(), markdown: true });
+  const headings = [...r.text.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(headings.slice(-3), ['Languages', 'Interests', 'Skills']);
+});
+
+// ---- an unfilled slot never reaches a PDF (the web path writes finished HTML) ------
+
+const SHIPPED_ATS = readFileSync(join(ATS_DIR, 'cv-template.ats.html'), 'utf-8');
+/** HTML as an agent leaves it: every placeholder filled except the Languages slot. */
+const agentFilled = (template) => template.replace(/\{\{(?!LANGUAGES_BLOCK)[A-Z_]+\}\}/g, 'x');
+
+test('the strip helper cuts the marker line, the token line and one blank line, for both shipped templates', () => {
+  assert.equal(stripUnfilledLanguagesSlot(SHIPPED), SHIPPED.replace(SLOT, ''));
+  assert.equal(stripUnfilledLanguagesSlot(SHIPPED_ATS), SHIPPED_ATS.replace('  <!-- LANGUAGES -->\n  {{LANGUAGES_BLOCK}}\n\n', ''));
+});
+
+test('stripEmptyRenderedSections removes an unfilled slot and keeps every other marker', () => {
+  const out = stripEmptyRenderedSections(agentFilled(SHIPPED));
+  assert.doesNotMatch(out, /LANGUAGES_BLOCK/);
+  assert.doesNotMatch(out, /<!-- LANGUAGES -->/);
+  for (const marker of ['EDUCATION', 'INTERESTS', 'SKILLS']) assert.match(out, new RegExp(`<!-- ${marker} -->`), marker);
+});
+
+test('HTML whose Languages slot was filled passes through unchanged', () => {
+  const built = build(basePayload({ languages: LANGS }), { template: slotTemplate() }).text;
+  assert.equal(stripEmptyRenderedSections(built), built);
+  assert.equal(stripUnfilledLanguagesSlot(built), built);
+});
+
+test('a slot spelled on one line loses its token', () => {
+  const out = stripUnfilledLanguagesSlot('<div>a</div>\n  <!-- LANGUAGES --> {{LANGUAGES_BLOCK}}\n  <!-- SKILLS -->\n');
+  assert.doesNotMatch(out, /LANGUAGES_BLOCK/);
+  assert.match(out, /<!-- SKILLS -->/);
 });
 
 test('without languages a slot-less template renders exactly as before', () => {
