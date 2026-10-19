@@ -10,7 +10,7 @@ Terms follow `CONTEXT.md`. A **Prospect** is a company recorded because it has a
 
 Every employer with a site in zones A to D of `modes/_brief.md` becomes one Prospect in `data/radar.tsv`. Zone E and remote are out. One Prospect is one brand or group, with its in-zone sites listed. Legal entities and spellings are aliases.
 
-Later stages are separate and not built: enrichment (what each company does technically), a gate (drop companies that could not employ you), contact discovery, personalization. The registry is addressed by column name so those stages can append columns.
+Later stages append columns by name: the Tiers below rank and gate the list without any network call, and the `spontaneous` mode does the per-company research, contact discovery and drafting for one Prospect at a time. Bulk enrichment of the whole registry is deliberately not built: what a company does technically is learned when you decide to apply to it.
 
 ## How to run it
 
@@ -80,8 +80,39 @@ Zefix holds name, legal form, seat, address and statutory purpose of every activ
 | `last_seen` | Date of latest appearance |
 | `portals_ref` | `portals.yml` entry name, or `—` |
 | `notes` | Yours; the Radar never rewrites it |
+| `tier` | `1`, `2`, `3` or `out`, written by `radar-tiers.mjs`; empty until the first run |
+| `tier_reason` | Why the Prospect has that tier, for example `tier 1: zone A, FR, 1 signal` or `out sector: 56 restaurants` |
+| `tier_override` | Yours: `1`, `2`, `3` or `out`. Wins over the rules and is never rewritten |
+| `spontaneous` | `drafted:D`, `skipped:D[:why]` or `sent:D:#N`, written by `spontaneous-pick.mjs mark` |
 
 Two entities with the same name and different register numbers are kept apart and listed as collisions, never merged silently. Add a column by hand if you need one: unknown columns are preserved.
+
+## Tiers
+
+A census of tens of thousands of names is not a to-do list, so `radar-tiers.mjs` ranks every Prospect without touching the network or a model. It reads the rule file `templates/radar-tiers.yml` (copy it to `config/radar-tiers.yml` to change it; a missing copy falls back to the template, an unparseable one is an error) and writes `tier` and `tier_reason`.
+
+```bash
+node radar-tiers.mjs --summary           # preview, writes nothing
+node radar-tiers.mjs --write --summary   # save
+node radar-tiers.mjs --explain acme      # rule trace and rank for one Prospect
+```
+
+| Tier | Rule |
+| ---- | ---- |
+| `out` | First match wins, in this order: a sector-floor NAF code (weapons, military vehicles, gambling), a company in `data/blacklist.md`, a consumer or trades sector division, a known size band of 1-2 or 3-5 staff |
+| `1` | In the pool (zone A, B, C or D) with at least one tech signal |
+| `2` | In the pool with no tech signal |
+| `3` | No zone A-D in `sites` |
+
+Zones C and D exist only in Switzerland in the zone table, so a French or German Prospect is zone A or B. An unknown size or a missing sector never demotes a row: it only adds `size ?` or `no NAF code` to `tier_reason`. Payday lending and surveillance have no NAF code, so they are checked at research time by the `spontaneous` mode, not here.
+
+Inside a tier the order is best zone, then Swiss before French and German, then more signals, then larger size, then the key, so the order is stable. Set `tier_override` by hand to force a row; it shows after the next `--write`.
+
+Run `--write` again after every `radar.mjs --write`: new rows have no tier yet, and `spontaneous-pick.mjs next` warns about `untiered` and stale rows until you do.
+
+## Daily use
+
+`spontaneous` (see `modes/spontaneous.md`) turns the best untouched tier 1 Prospect into one draft Spontaneous application: live research on that company only, an HR or engineering contact, a no-JD CV and an email. Draft only; nothing is sent.
 
 ## Completeness
 
