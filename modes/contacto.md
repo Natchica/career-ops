@@ -51,6 +51,12 @@ short message; otherwise run the LinkedIn power move below.
    - A team peer (someone with a similar role)
    - Interviewer, if the candidate already has a scheduled interview
 
+   **Invoked from `spontaneous` (no posting, no application yet):** use the
+   **Hiring contact (Spontaneous)** order instead of the list above. An
+   in-house recruiter or talent-acquisition contact first; an engineer second
+   (the engineering lead, the CTO when the company has fewer than 50 staff, or
+   a senior backend engineer). Same ceiling and same "never guess a name" rule.
+
    **Three WebSearch calls is a hard ceiling, not a suggestion.** Step 3 selects a
    single primary target and step 4 writes one message, so every search past the
    first confirmed hit is paid for and thrown away. One confirmed contact is a
@@ -72,6 +78,9 @@ short message; otherwise run the LinkedIn power move below.
      company). This is the opposite of Peer: Peer explicitly assumes no
      relationship yet; Internal Referral exists only because one already
      does.
+   - **Hiring contact (Spontaneous)** -- a recruiter or an engineering lead at
+     a Radar Prospect that has no posting, reached by the `spontaneous` mode.
+     No prior relationship is assumed.
 
 3. **Select primary target**: the person who would benefit most from the candidate being there
 
@@ -117,6 +126,18 @@ short message; otherwise run the LinkedIn power move below.
      time-respecting move -- hedging here reads as if the candidate forgot
      the relationship happened.
 
+   ### Hiring contact (Spontaneous)
+   - **Sentence 1 (Reason for writing)**: One confirmed fact about the company
+     (from the `spontaneous` research, with its source) and why it made the
+     candidate write -- never a claim the research did not confirm.
+   - **Sentence 2 (Proof)**: One proof point copied from `cv.md`, picked from
+     the `modes/_profile.md` row "No JD — Spontaneous application to a Radar
+     Prospect".
+   - **Sentence 3 (CTA)**: Ask whether the team hires backend engineers and on
+     which stack, and offer to send the CV.
+   - **Note**: there is no posting, so do not write as if one existed, and do
+     not ask for "any opening". Direct, value-first, no desperation.
+
 5. **Versions**:
    - EN (default)
    - ES (if Spanish company)
@@ -145,6 +166,11 @@ short message; otherwise run the LinkedIn power move below.
    interview, a real conversation, anything beyond "we're both at this
    company"), leave the saved row's type as-is and treat this as a fresh
    `peer`/`recruiter` outreach instead, not an `internal-referral` one.
+
+   A **Hiring contact (Spontaneous)** is saved under the existing types, since
+   `contacts.mjs` accepts a closed set: an HR or talent-acquisition contact as
+   `recruiter`, an engineer who leads the team as `hiring-manager`, any other
+   engineer as `peer`. Use `-` for tracker# until the application is recorded.
 
    When the contact comes from a pasted recruiter/interviewer reply, run
    `node contact-extract.mjs --file <email.txt>` instead. It reuses the reply
