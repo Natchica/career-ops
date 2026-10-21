@@ -7,7 +7,16 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as vl from '../verify-letter.mjs';
+import * as lib from '../lib/letter-text.mjs';
 import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, loadBannedLists, parseVoiceDna, splitBody } from '../verify-letter.mjs';
+
+test('verify-letter re-exports the shared text helpers from lib/letter-text.mjs', () => {
+  assert.equal(vl.detectLang, lib.detectLang);
+  assert.equal(vl.isGermanSentence, lib.isGermanSentence);
+  assert.equal(typeof lib.splitParagraphs, 'function');
+  assert.deepEqual(lib.splitParagraphs('A one. B two.\n\nIch lerne weiter Deutsch und strebe das Niveau B2 an.'), [['A one.', 'B two.']]);
+});
 
 const P1 = 'Example AG builds compliance software for Swiss banks, and your posting for a Backend Engineer describes a team that runs its own services from design to production. Since February 2024 I have been lead developer on three production Rust services and reviewer on three more in a decentralized cloud platform. That scope is the reason I am applying to a team where backend systems are the product.';
 const P2 = 'The strongest evidence is a rewrite. I profiled two Java middleware components, replaced them with Rust, and measured a 75% gain in core performance. Alongside that work, five Spring services moved from Java 11 to Java 17 and shipped together in one coordinated release. A second engineer reviewed each step before merge. The suite of more than 1,250 unit tests kept 100% coverage through every change, which let reviewers merge with confidence.';
