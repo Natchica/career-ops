@@ -153,6 +153,89 @@ test('33 and 33b: must not flag arrows in CVs and messages, company names or URL
   }
 });
 
+test('20: fires on chatbot phrases in English and French', () => {
+  for (const text of ['I hope this helps.', 'Let me know if you have questions.', 'Certainly! Here is the plan.', 'The plan is ready. Of course, I can adjust it.']) {
+    assert.equal(has(text, '20', { lang: 'en' }), true, text);
+  }
+  for (const text of ['J’espère que cela vous aidera.', 'Bien sûr ! Voici le plan.', 'En tant qu’IA, je ne peux pas.']) {
+    assert.equal(has(text, '20', { lang: 'fr' }), true, text);
+  }
+});
+
+test('20: must not flag a question to the reader, a mid-sentence certainly or a standard French closing', () => {
+  assert.equal(has('Could you tell me which stack the team uses?', '20', { lang: 'en' }), false);
+  assert.equal(has('The release certainly shipped on time.', '20', { lang: 'en' }), false);
+  assert.equal(has('Je reste à votre disposition.', '20', { lang: 'fr' }), false);
+  assert.equal(has('N’hésitez pas à me contacter.', '20', { lang: 'fr' }), false);
+});
+
+test('22: fires on sycophantic tone, must not flag the word question', () => {
+  assert.equal(has('Great question! The stack is Rust.', '22', { lang: 'en' }), true);
+  assert.equal(has('Excellente question. La pile est Rust.', '22', { lang: 'fr' }), true);
+  assert.equal(has('A question about the stack came up.', '22', { lang: 'en' }), false);
+});
+
+test('36: fires on hook lines, must not flag the word catch inside a sentence', () => {
+  for (const text of ['The catch? Nobody checks.', 'Here’s the thing. It works.', 'Sound familiar?', 'It ships. Let that sink in.']) {
+    assert.equal(has(text, '36', { lang: 'en' }), true, text);
+  }
+  assert.equal(has('The catch rate rose to 75%.', '36', { lang: 'en' }), false);
+});
+
+test('39: fires on meta commentary, must not flag a role description', () => {
+  for (const text of ['In this article we cover Rust.', 'Let me walk you through the design.']) {
+    assert.equal(has(text, '39', { lang: 'en' }), true, text);
+  }
+  for (const text of ['Dans cet article, nous voyons Rust.', 'Sans plus attendre, voici le plan.']) {
+    assert.equal(has(text, '39', { lang: 'fr' }), true, text);
+  }
+  assert.equal(has('In this role I aim to own a service.', '39', { lang: 'en' }), false);
+});
+
+test('5, 8, 25, 37, 38: fire on their phrases', () => {
+  const cases = [
+    ['5', 'en', 'Experts believe the stack is sound.'],
+    ['5', 'fr', 'Selon les experts, la pile est solide.'],
+    ['8', 'en', 'The service serves as a gateway.'],
+    ['8', 'en', 'The platform boasts a clean design.'],
+    ['25', 'en', 'The future looks bright for the team.'],
+    ['25', 'fr', 'L’avenir s’annonce prometteur.'],
+    ['37', 'en', 'There are several ways to build this.'],
+    ['38', 'en', 'While some might argue otherwise, the design works.'],
+  ];
+  for (const [id, lang, text] of cases) assert.equal(has(text, id, { lang }), true, `${id}: ${text}`);
+});
+
+test('5, 8, 25, 37, 38: must not flag plain uses', () => {
+  const cases = [
+    ['8', 'The new features shipped last week.'],
+    ['8', 'The gateway is a reverse proxy.'],
+    ['25', 'The future release adds batching.'],
+    ['38', 'It took a first glance at the logs.'],
+    ['37', 'There are 3 services in the stack.'],
+  ];
+  for (const [id, text] of cases) assert.equal(has(text, id, { lang: 'en' }), false, `${id}: ${text}`);
+});
+
+test('7 and 26: fire on AI vocabulary and metaphor nouns', () => {
+  for (const text of ['We delve into the realm of caching.', 'The work is a testament to the team.']) {
+    assert.equal(has(text, '7', { lang: 'en' }), true, text);
+  }
+  for (const text of ['Reliability is our north star.', 'Tests are the bedrock of the design.']) {
+    assert.equal(has(text, '26', { lang: 'en' }), true, text);
+  }
+});
+
+test('7 and 26: must not flag product names or listed technical collocations', () => {
+  assert.equal(has('We store sessions in MongoDB Realm for mobile.', '7', { lang: 'en' }), false);
+  assert.equal(has('The model runs on Amazon Bedrock today.', '26', { lang: 'en' }), false);
+  for (const text of ['We query a vector database.', 'SIMD vectors speed up the loop.', 'The functional paradigm helps here.', 'It needs project scaffolding first.']) {
+    assert.equal(has(text, '26', { lang: 'en' }), false, text);
+  }
+  // A sentence-initial capital is not provably a name, so it still fires.
+  assert.equal(has('Realm of caching is next.', '7', { lang: 'en' }), true);
+});
+
 test('scanText is exported with ids()', () => {
   assert.deepEqual(ids('Plain text.'), []);
 });
