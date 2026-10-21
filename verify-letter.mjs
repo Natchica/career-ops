@@ -16,10 +16,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
+import { detectLang, isGermanSentence, splitParagraphs, termRe, wordCount } from './lib/letter-text.mjs';
+
+export { detectLang, isGermanSentence };
 
 export const WORD_BUDGET = { letter: [250, 350], email: [150, 250] };
 
-const SENTENCE_SPLIT = /(?<=[.!?])\s+(?=[\p{Lu}\p{N}"«(])/u;
 const HEADER_LINE = /^\s*(?:Subject|Objet|Annexes?)\s*:/i;
 const SALUTATION = /^(?:Dear|Hello|Madame|Monsieur|Bonjour|Sehr geehrte|Guten Tag)\b.*,\s*$/i;
 const VALEDICTION = /^(?:Kind regards|Best regards|Regards|Sincerely|Yours (?:sincerely|faithfully)|Veuillez agréer|Je vous prie d['’]agréer|Meilleures salutations|Cordialement|Mit freundlichen Grüssen|Freundliche Grüsse)/i;
@@ -65,19 +67,7 @@ export const BUILTIN_BANNED = {
   phrases: ["in today's", 'it is important to note', 'in order to', 'at the end of the day', 'moving forward', 'furthermore', 'additionally', 'moreover', 'that said', 'that being said', 'with that in mind', 'on top of that'],
 };
 
-const escapeRe = (term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/'/g, "['’]").replace(/\s+/g, '\\s+');
-const termRe = (terms) => new RegExp(`(?<![\\p{L}-])(?:${terms.map(escapeRe).join('|')})(?![\\p{L}-])`, 'giu');
 const STOCK_RE = termRe(STOCK);
-
-// Words that only German uses, from the one B1 sentence voice-dna.md allows plus its cousins.
-const DE_WORDS = new Set(['ich', 'und', 'nicht', 'mein', 'meine', 'meinen', 'weiter', 'weiterhin', 'lerne', 'lernen', 'deutsch', 'deutschkenntnisse', 'zum', 'zur', 'mit', 'auf', 'ist', 'bin', 'habe', 'sie', 'ihnen', 'freue', 'möchte', 'bis', 'das', 'erreichen', 'strebe']);
-
-/** A sentence is German when it has at least 2 distinct German markers; an umlaut or ß counts as one. */
-export function isGermanSentence(sentence) {
-  const hits = new Set((String(sentence).toLowerCase().match(/\p{L}+/gu) ?? []).filter((w) => DE_WORDS.has(w)));
-  if (/[äöüß]/i.test(sentence)) hits.add('umlaut');
-  return hits.size >= 2;
-}
 
 const LEGAL_SUFFIX = /\s+(?:AG|SA|S\.A\.|GmbH|Sàrl|SARL|SAS|Ltd\.?|Inc\.?|LLC)$/i;
 
@@ -145,19 +135,7 @@ export function loadBannedLists(root = getCareerOpsRoot()) {
   return { lists, note: null };
 }
 
-const FR_MARK = /(?<![\p{L}-])(?:le|la|les|je|j['’]|vous|nous|des|une|est|pour|avec)(?![\p{L}-])/giu;
-const EN_MARK = /(?<![\p{L}-])(?:the|and|i|you|we|of|to|is|with|for)(?![\p{L}-])/giu;
-
-/** 'fr' when French function words outnumber English ones, else 'en'. */
-export function detectLang(text) {
-  const t = String(text ?? '');
-  return (t.match(FR_MARK) ?? []).length > (t.match(EN_MARK) ?? []).length ? 'fr' : 'en';
-}
-
 const unique = (re, sentences) => [...new Set(sentences.flatMap((s) => [...s.matchAll(re)].map((m) => m[0].toLowerCase())))];
-
-const isWord = (token) => /[\p{L}\p{N}]/u.test(token);
-const wordCount = (sentences) => sentences.reduce((n, s) => n + s.split(/\s+/).filter(isWord).length, 0);
 
 /**
  * Cut the letter body out of a text: drop Subject/Objet/Annexes lines, a leading
@@ -174,13 +152,7 @@ export function splitBody(text) {
   const first = lines.findIndex((line) => line.trim() !== '');
   if (first !== -1 && SALUTATION.test(lines[first].trim())) lines = lines.slice(first + 1);
 
-  const paragraphs = lines
-    .join('\n')
-    .split(/\n\s*\n/)
-    .map((block) => block.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .map((block) => block.split(SENTENCE_SPLIT).map((s) => s.trim()).filter((s) => s && !isGermanSentence(s)))
-    .filter((sentences) => sentences.length > 0);
+  const paragraphs = splitParagraphs(lines.join('\n'));
   return { paragraphs };
 }
 
