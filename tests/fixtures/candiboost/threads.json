@@ -1,0 +1,872 @@
+[
+  {
+    "id": "cb0001",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0001",
+        "threadId": "cb0001",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1791972327000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "marco.huber@bkb.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Wed, 14 Oct 2026 10:05:27 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0001@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 405,
+                    "data": "Qm9uam91ciBNLiBIdWJlciwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQktCLgpK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuClZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4KQmllbiBjb3JkaWFsZW1lbnQsCk5hdGhhbiBHYXVk"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNLiBIdWJlciwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQktCLiBK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuIFZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4gQmllbiBjb3JkaWFsZW1lbnQsIE5hdGhhbiBHYXVkPC9kaXY-"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0001",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0002",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0002",
+        "threadId": "cb0002",
+        "labelIds": [
+          "Label_1",
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792060581000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "pweber@acme-bank.com"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 15 Oct 2026 10:36:21 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0002@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 411,
+                    "data": "Qm9uam91ciBNLiBXZWJlciwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQUNNRSBCQU5LLgpK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuClZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4KQmllbiBjb3JkaWFsZW1lbnQsCk5hdGhhbiBHYXVk"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNLiBXZWJlciwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQUNNRSBCQU5LLiBK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuIFZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4gQmllbiBjb3JkaWFsZW1lbnQsIE5hdGhhbiBHYXVkPC9kaXY-"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0002",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "cb0002b",
+        "threadId": "cb0002",
+        "labelIds": [
+          "Label_1",
+          "CATEGORY_UPDATES"
+        ],
+        "snippet": "",
+        "internalDate": "1792060584000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/report",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Mail Delivery Subsystem <mailer-daemon@googlemail.com>"
+            },
+            {
+              "name": "To",
+              "value": "candidate@example.com"
+            },
+            {
+              "name": "Subject",
+              "value": "Delivery Status Notification (Failure)"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 15 Oct 2026 10:36:24 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0002b@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "text/plain",
+              "filename": "",
+              "body": {
+                "size": 206,
+                "data": "KiogQWRyZXNzZSBpbnRyb3V2YWJsZSAqKgpWb3RyZSBtZXNzYWdlIG4nZXN0IHBhcyBwYXJ2ZW51IMOgIHB3ZWJlckBhY21lLWJhbmsuY29tLCBjYXIgbCdhZHJlc3NlIGVzdCBpbnRyb3V2YWJsZSBvdSBuZSBwZXV0IHBhcyByZWNldm9pciBkZSBtZXNzYWdlcy4KUsOpcG9uc2UgZHUgc2VydmV1ciBkaXN0YW50IDoKNTUwICM1LjEuMSBBZGRyZXNzIHJlamVjdGVkLg"
+              }
+            },
+            {
+              "partId": "1",
+              "mimeType": "message/delivery-status",
+              "filename": "",
+              "body": {
+                "size": 124,
+                "data": "RmluYWwtUmVjaXBpZW50OiByZmM4MjI7IHB3ZWJlckBhY21lLWJhbmsuY29tCkFjdGlvbjogZmFpbGVkClN0YXR1czogNS4xLjEKRGlhZ25vc3RpYy1Db2RlOiBzbXRwOyA1NTAgNS4xLjEgQWRkcmVzcyByZWplY3RlZA"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0003",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0003",
+        "threadId": "cb0003",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792059611000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "anna.keller@pistor.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 15 Oct 2026 10:20:11 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0003@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 410,
+                    "data": "Qm9uam91ciBNbWUgS2VsbGVyLApKZSBtZSBwZXJtZXRzIGRlIHZvdXMgYWRyZXNzZXIgbWEgY2FuZGlkYXR1cmUgc3BvbnRhbsOpZSBwb3VyIHVuIHBvc3RlIGRlIFNvZnR3YXJlIEVuZ2luZWVyIEJhY2tlbmQgYXUgc2VpbiBkZSBQSVNUT1IuCkrigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4KVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLgpCaWVuIGNvcmRpYWxlbWVudCwKTmF0aGFuIEdhdWQ"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNbWUgS2VsbGVyLCBKZSBtZSBwZXJtZXRzIGRlIHZvdXMgYWRyZXNzZXIgbWEgY2FuZGlkYXR1cmUgc3BvbnRhbsOpZSBwb3VyIHVuIHBvc3RlIGRlIFNvZnR3YXJlIEVuZ2luZWVyIEJhY2tlbmQgYXUgc2VpbiBkZSBQSVNUT1IuIErigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4gVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLiBCaWVuIGNvcmRpYWxlbWVudCwgTmF0aGFuIEdhdWQ8L2Rpdj4"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0003",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "cb0003r",
+        "threadId": "cb0003",
+        "labelIds": [
+          "INBOX"
+        ],
+        "snippet": "",
+        "internalDate": "1792138320000",
+        "payload": {
+          "partId": "",
+          "mimeType": "text/plain",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Anna Keller <anna.keller@pistor.ch>"
+            },
+            {
+              "name": "To",
+              "value": "candidate@example.com"
+            },
+            {
+              "name": "Subject",
+              "value": "RE: Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 08:12:00 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0003r@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 142,
+            "data": "Qm9uam91ciwKTWVyY2kgcG91ciB2b3RyZSBtZXNzYWdlLiBOb3VzIG7igJlhdm9ucyBwYXMgZGUgcG9zdGUgb3V2ZXJ0IHBvdXIgbGUgbW9tZW50LCBtYWlzIG5vdXMgZ2FyZG9ucyB2b3RyZSBkb3NzaWVyLgpDb3JkaWFsZW1lbnQsCkFubmEgS2VsbGVy"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0004",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0004",
+        "threadId": "cb0004",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792060809000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "lukas.meier@adesso.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 15 Oct 2026 10:40:09 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0004@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 416,
+                    "data": "Qm9uam91ciBNLiBNZWllciwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQURFU1NPIFNDSFdFSVouCkrigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4KVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLgpCaWVuIGNvcmRpYWxlbWVudCwKTmF0aGFuIEdhdWQ"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNLiBNZWllciwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQURFU1NPIFNDSFdFSVouIErigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4gVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLiBCaWVuIGNvcmRpYWxlbWVudCwgTmF0aGFuIEdhdWQ8L2Rpdj4"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0004",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "cb0004o",
+        "threadId": "cb0004",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792141200000",
+        "payload": {
+          "partId": "",
+          "mimeType": "text/plain",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "lukas.meier@adesso.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Re: Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 09:00:00 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0004o@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 87,
+            "data": "SGVsbG8sCkEgc2hvcnQgbm90ZSB0byBhZGQgdGhhdCBJIGFtIGF2YWlsYWJsZSBmcm9tIERlY2VtYmVyLgpCZXN0IHJlZ2FyZHMsCk5hdGhhbiBHYXVk"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0005",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0005",
+        "threadId": "cb0005",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792145500000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "julia.brun@roche.com"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 10:11:40 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0005@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 407,
+                    "data": "Qm9uam91ciBNbWUgQnJ1biwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgUk9DSEUuCkrigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4KVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLgpCaWVuIGNvcmRpYWxlbWVudCwKTmF0aGFuIEdhdWQ"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNbWUgQnJ1biwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgUk9DSEUuIErigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4gVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLiBCaWVuIGNvcmRpYWxlbWVudCwgTmF0aGFuIEdhdWQ8L2Rpdj4"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0005",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0006",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0006",
+        "threadId": "cb0006",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792146302000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "sara.frei@bkb.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 10:25:02 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0006@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 405,
+                    "data": "Qm9uam91ciBNbWUgRnJlaSwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQktCLgpK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuClZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4KQmllbiBjb3JkaWFsZW1lbnQsCk5hdGhhbiBHYXVk"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNbWUgRnJlaSwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgQktCLiBK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuIFZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4gQmllbiBjb3JkaWFsZW1lbnQsIE5hdGhhbiBHYXVkPC9kaXY-"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0006",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0007",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0007",
+        "threadId": "cb0007",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792146655000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "jean-luc.morel@optimo-example.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 10:30:55 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0007@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 390,
+                    "data": "Qm9uam91ciBNLiBNb3JlbCwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kLgpK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuClZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4KQmllbiBjb3JkaWFsZW1lbnQsCk5hdGhhbiBHYXVk"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNLiBNb3JlbCwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kLiBK4oCZYWkgw6AgY8WTdXIgZGUgbeKAmWludmVzdGlyIGR1cmFibGVtZW50LCBldCBq4oCZYWkgbGEgY29udmljdGlvbiBxdWUgbW9uIHByb2ZpbCBhaW5zaSBxdWUgbW9uIGVuZ2FnZW1lbnQgcGV1dmVudCBjb250cmlidWVyIGNvbmNyw6h0ZW1lbnQgw6Agdm9zIHByb2pldHMuIFZvdXMgdHJvdXZlcmV6IG1vbiBDViBlbiBwacOoY2Ugam9pbnRlLiBKZSByZXN0ZSDDoCB2b3RyZSBlbnRpw6hyZSBkaXNwb3NpdGlvbiBwb3VyIGVuIMOpY2hhbmdlci4gQmllbiBjb3JkaWFsZW1lbnQsIE5hdGhhbiBHYXVkPC9kaXY-"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Nathan-Gaud.pdf",
+              "body": {
+                "attachmentId": "att-cb0007",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0008",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0008",
+        "threadId": "cb0008",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1792147530000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "eva.roth@nopdf-example.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Candidature spontanée - Software Engineer Backend - Nathan Gaud"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 16 Oct 2026 10:45:30 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0008@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 407,
+                    "data": "Qm9uam91ciBNbWUgUm90aCwKSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgTk9QREYuCkrigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4KVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLgpCaWVuIGNvcmRpYWxlbWVudCwKTmF0aGFuIEdhdWQ"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-Qm9uam91ciBNbWUgUm90aCwgSmUgbWUgcGVybWV0cyBkZSB2b3VzIGFkcmVzc2VyIG1hIGNhbmRpZGF0dXJlIHNwb250YW7DqWUgcG91ciB1biBwb3N0ZSBkZSBTb2Z0d2FyZSBFbmdpbmVlciBCYWNrZW5kIGF1IHNlaW4gZGUgTk9QREYuIErigJlhaSDDoCBjxZN1ciBkZSBt4oCZaW52ZXN0aXIgZHVyYWJsZW1lbnQsIGV0IGrigJlhaSBsYSBjb252aWN0aW9uIHF1ZSBtb24gcHJvZmlsIGFpbnNpIHF1ZSBtb24gZW5nYWdlbWVudCBwZXV2ZW50IGNvbnRyaWJ1ZXIgY29uY3LDqHRlbWVudCDDoCB2b3MgcHJvamV0cy4gVm91cyB0cm91dmVyZXogbW9uIENWIGVuIHBpw6hjZSBqb2ludGUuIEplIHJlc3RlIMOgIHZvdHJlIGVudGnDqHJlIGRpc3Bvc2l0aW9uIHBvdXIgZW4gw6ljaGFuZ2VyLiBCaWVuIGNvcmRpYWxlbWVudCwgTmF0aGFuIEdhdWQ8L2Rpdj4"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cb0009",
+    "historyId": "1",
+    "messages": [
+      {
+        "id": "cb0009",
+        "threadId": "cb0009",
+        "labelIds": [
+          "SENT"
+        ],
+        "snippet": "",
+        "internalDate": "1791885600000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "From",
+              "value": "Nathan Gaud <candidate@example.com>"
+            },
+            {
+              "name": "To",
+              "value": "hr@other-example.ch"
+            },
+            {
+              "name": "Subject",
+              "value": "Application - Backend Engineer"
+            },
+            {
+              "name": "Date",
+              "value": "Tue, 13 Oct 2026 10:00:00 GMT"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<cb0009@mail.example.com>"
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "mimeType": "multipart/alternative",
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "body": {
+                    "size": 379,
+                    "data": "SGVsbG8sCkplIG1lIHBlcm1ldHMgZGUgdm91cyBhZHJlc3NlciBtYSBjYW5kaWRhdHVyZSBzcG9udGFuw6llIHBvdXIgdW4gcG9zdGUgZGUgU29mdHdhcmUgRW5naW5lZXIgQmFja2VuZC4KSuKAmWFpIMOgIGPFk3VyIGRlIG3igJlpbnZlc3RpciBkdXJhYmxlbWVudCwgZXQgauKAmWFpIGxhIGNvbnZpY3Rpb24gcXVlIG1vbiBwcm9maWwgYWluc2kgcXVlIG1vbiBlbmdhZ2VtZW50IHBldXZlbnQgY29udHJpYnVlciBjb25jcsOodGVtZW50IMOgIHZvcyBwcm9qZXRzLgpWb3VzIHRyb3V2ZXJleiBtb24gQ1YgZW4gcGnDqGNlIGpvaW50ZS4gSmUgcmVzdGUgw6Agdm90cmUgZW50acOocmUgZGlzcG9zaXRpb24gcG91ciBlbiDDqWNoYW5nZXIuCkJpZW4gY29yZGlhbGVtZW50LApOYXRoYW4gR2F1ZA"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "body": {
+                    "size": 10,
+                    "data": "PGRpdiBkaXI9Imx0ciI-SGVsbG8sIEplIG1lIHBlcm1ldHMgZGUgdm91cyBhZHJlc3NlciBtYSBjYW5kaWRhdHVyZSBzcG9udGFuw6llIHBvdXIgdW4gcG9zdGUgZGUgU29mdHdhcmUgRW5naW5lZXIgQmFja2VuZC4gSuKAmWFpIMOgIGPFk3VyIGRlIG3igJlpbnZlc3RpciBkdXJhYmxlbWVudCwgZXQgauKAmWFpIGxhIGNvbnZpY3Rpb24gcXVlIG1vbiBwcm9maWwgYWluc2kgcXVlIG1vbiBlbmdhZ2VtZW50IHBldXZlbnQgY29udHJpYnVlciBjb25jcsOodGVtZW50IMOgIHZvcyBwcm9qZXRzLiBWb3VzIHRyb3V2ZXJleiBtb24gQ1YgZW4gcGnDqGNlIGpvaW50ZS4gSmUgcmVzdGUgw6Agdm90cmUgZW50acOocmUgZGlzcG9zaXRpb24gcG91ciBlbiDDqWNoYW5nZXIuIEJpZW4gY29yZGlhbGVtZW50LCBOYXRoYW4gR2F1ZDwvZGl2Pg"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/pdf",
+              "filename": "Gaud_Nathan_CV.pdf",
+              "body": {
+                "attachmentId": "att-cb0009",
+                "size": 41234
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
