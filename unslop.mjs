@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
-import { detectLang, splitParagraphs, termRe } from './lib/letter-text.mjs';
+import { detectLang, normTerm, splitParagraphs, termRe } from './lib/letter-text.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,22 +45,34 @@ function contextAround(subject, index, length) {
   return subject.slice(Math.max(0, index - 40), index + length + 40).replace(/\s+/g, ' ').trim();
 }
 
+/** The terms a rule lists for the text's language, plus the shared `all` list. */
+const termsFor = (rule, lang, key = 'terms') => [...(rule[key]?.all ?? []), ...(rule[key]?.[lang] ?? [])];
+
+/**
+ * Should a match stay a hit? A capitalised word inside a sentence is read as a name (MongoDB Realm)
+ * unless it opens the sentence; a match whose 40-character window fits an `except` pattern is a
+ * literal use (vector database).
+ */
+function keepHit(rule, exceptions, subject, m) {
+  if (rule.skip_proper_nouns && /^\p{Lu}/u.test(m[0]) && !/(?:^|[.!?]\s+)$/.test(subject.slice(0, m.index))) return false;
+  const window = subject.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+  return !exceptions.some((re) => re.test(window));
+}
+
+const exceptionsOf = (rule) => (rule.except ?? []).map((source) => new RegExp(source, 'iu'));
+const subjectsOf = (ctx, rule) => (rule.scope === 'text' ? [ctx.text] : ctx.paragraphs);
+
 /** Terms (whole-word, apostrophe-tolerant) and patterns for the text's language, over the rule's scope. */
 export function detectMatchList(ctx, rule) {
-  const terms = [...(rule.terms?.all ?? []), ...(rule.terms?.[ctx.lang] ?? [])];
-  const sources = [...(rule.patterns?.all ?? []), ...(rule.patterns?.[ctx.lang] ?? [])];
+  const terms = termsFor(rule, ctx.lang);
+  const sources = termsFor(rule, ctx.lang, 'patterns');
   const regexes = [...(terms.length ? [termRe(terms)] : []), ...sources.map((source) => new RegExp(source, flagsFor(rule)))];
-  const exceptions = (rule.except ?? []).map((source) => new RegExp(source, 'iu'));
-  const subjects = rule.scope === 'text' ? [ctx.text] : ctx.paragraphs;
+  const exceptions = exceptionsOf(rule);
   const hits = [];
-  for (const subject of subjects) {
+  for (const subject of subjectsOf(ctx, rule)) {
     for (const re of regexes) {
       for (const m of subject.matchAll(re)) {
-        if (m[0] === '') continue;
-        // A capitalised word inside a sentence is read as a name (MongoDB Realm), unless it opens one.
-        if (rule.skip_proper_nouns && /^\p{Lu}/u.test(m[0]) && !/(?:^|[.!?]\s+)$/.test(subject.slice(0, m.index))) continue;
-        const window = subject.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
-        if (exceptions.some((re) => re.test(window))) continue;
+        if (m[0] === '' || !keepHit(rule, exceptions, subject, m)) continue;
         hits.push({ term: m[0], context: contextAround(subject, m.index, m[0].length) });
       }
     }
@@ -68,6 +80,41 @@ export function detectMatchList(ctx, rule) {
   return hits;
 }
 UNSLOP_DETECTORS['match-list'] = detectMatchList;
+
+/** One finding per paragraph that holds at least `min_hits` of the listed terms (a cluster, not an isolated tell). */
+export function detectCluster(ctx, rule) {
+  const terms = termsFor(rule, ctx.lang);
+  if (terms.length === 0) return [];
+  const re = termRe(terms);
+  const exceptions = exceptionsOf(rule);
+  const out = [];
+  for (const subject of ctx.paragraphs) {
+    const hits = [...subject.matchAll(re)].filter((m) => keepHit(rule, exceptions, subject, m)).map((m) => m[0]);
+    if (hits.length >= (rule.min_hits ?? 2)) out.push({ term: hits.join(', '), context: subject.slice(0, 120), hits });
+  }
+  return out;
+}
+UNSLOP_DETECTORS.cluster = detectCluster;
+
+/** Phrases with a plain replacement; the finding carries the hint `use "x"` or `delete it`. */
+export function detectPhraseMap(ctx, rule) {
+  const map = rule.map?.[ctx.lang] ?? {};
+  const keys = Object.keys(map).sort((a, b) => b.length - a.length);
+  if (keys.length === 0) return [];
+  const replacement = new Map(keys.map((k) => [normTerm(k), map[k]]));
+  const re = termRe(keys);
+  const exceptions = exceptionsOf(rule);
+  const hits = [];
+  for (const subject of ctx.paragraphs) {
+    for (const m of subject.matchAll(re)) {
+      if (!keepHit(rule, exceptions, subject, m)) continue;
+      const to = replacement.get(normTerm(m[0]));
+      hits.push({ term: m[0], context: contextAround(subject, m.index, m[0].length), hint: to === '' || to == null ? 'delete it' : `use "${to}"` });
+    }
+  }
+  return hits;
+}
+UNSLOP_DETECTORS['phrase-map'] = detectPhraseMap;
 
 const DEFAULT_RULES_PATH = resolve(__dirname, 'templates', 'unslop-rules.yml');
 
