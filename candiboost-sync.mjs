@@ -39,7 +39,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const QUERY = 'in:sent subject:"Candidature spontanée"';
 const GMAIL_ENV = ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN'];
-const FETCH_BATCH = 8;
+const FETCH_BATCH = 4;
 const REGISTRY_SPEC = { key: 'thread_id', columns: REGISTRY_COLUMNS };
 
 const USAGE = `Usage: node --env-file=.env candiboost-sync.mjs <sync|pick|mark> [options]
@@ -82,17 +82,31 @@ function fail(message, code = CLI_EXIT.USAGE) {
   process.exit(code);
 }
 
-async function googleJson(fetchFn, url, init, what) {
-  const res = await fetchFn(url, init);
-  let body = {};
-  try { body = await res.json(); } catch { /* an unreadable body is reported by status below */ }
-  const err = body?.error;
-  if (res.ok && !err) return body;
-  let detail;
-  if (err && typeof err === 'object') detail = [err.status ?? err.code, err.message].filter(Boolean).join(': ');
-  else if (err) detail = [err, body.error_description].filter(Boolean).join(': ');
-  else detail = `HTTP ${res.status}`;
-  throw new GmailError(`${what} failed: ${detail}`);
+const RETRY_WAITS_MS = [2000, 4000, 8000, 16000, 32000];
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Gmail answers a burst of reads with HTTP 429, or with a 403 whose text names a quota. Only these
+// clear on their own; a scope or grant failure never does, so it is not retried.
+function isRateLimit(res, err) {
+  if (res.status === 429) return true;
+  const text = typeof err === 'object' ? `${err?.status ?? ''} ${err?.message ?? ''}` : '';
+  return /rateLimitExceeded|RESOURCE_EXHAUSTED|quota exceeded|too many requests/i.test(text);
+}
+
+async function googleJson(fetchFn, url, init, what, sleep = defaultSleep) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchFn(url, init);
+    let body = {};
+    try { body = await res.json(); } catch { /* an unreadable body is reported by status below */ }
+    const err = body?.error;
+    if (res.ok && !err) return body;
+    if (attempt < RETRY_WAITS_MS.length && isRateLimit(res, err)) { await sleep(RETRY_WAITS_MS[attempt]); continue; }
+    let detail;
+    if (err && typeof err === 'object') detail = [err.status ?? err.code, err.message].filter(Boolean).join(': ');
+    else if (err) detail = [err, body.error_description].filter(Boolean).join(': ');
+    else detail = `HTTP ${res.status}`;
+    throw new GmailError(`${what} failed: ${detail}`);
+  }
 }
 
 /**
@@ -100,7 +114,7 @@ async function googleJson(fetchFn, url, init, what) {
  * token, list `in:sent` threads with the subject, get each one.
  * @param {{fetch?: Function, env?: Record<string,string|undefined>}} [options]
  */
-export async function fetchSentThreads({ fetch: fetchFn = globalThis.fetch, env = process.env } = {}) {
+export async function fetchSentThreads({ fetch: fetchFn = globalThis.fetch, env = process.env, sleep = defaultSleep } = {}) {
   const missing = GMAIL_ENV.filter((name) => !env[name]);
   if (missing.length) throw new GmailError(`missing ${missing.join(', ')}`);
   const token = await googleJson(fetchFn, TOKEN_URL, {
@@ -129,7 +143,7 @@ export async function fetchSentThreads({ fetch: fetchFn = globalThis.fetch, env 
   const threads = [];
   for (let i = 0; i < ids.length; i += FETCH_BATCH) {
     const batch = ids.slice(i, i + FETCH_BATCH);
-    threads.push(...await Promise.all(batch.map((id) => googleJson(fetchFn, `${GMAIL_API}/threads/${encodeURIComponent(id)}?format=full`, init, `Gmail threads.get ${id}`))));
+    threads.push(...await Promise.all(batch.map((id) => googleJson(fetchFn, `${GMAIL_API}/threads/${encodeURIComponent(id)}?format=full`, init, `Gmail threads.get ${id}`, sleep))));
   }
   return threads;
 }
