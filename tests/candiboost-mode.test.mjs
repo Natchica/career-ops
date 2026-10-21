@@ -67,6 +67,15 @@ test('followup routes Candiboost sends to the candiboost mode instead of draftin
   assert.ok(followup.includes('/career-ops candiboost follow'));
 });
 
+test('the router lists candiboost as a mode, a hint, a menu line and a _shared.md mode', () => {
+  const router = read('.agents/skills/career-ops/SKILL.md');
+  assert.match(router, /^\| `candiboost` \| `candiboost` \|$/m);
+  assert.match(router, /^argument-hint:.*\bcandiboost\b/m);
+  assert.match(router, /^ {2}\/career-ops candiboost +→/m);
+  const applies = router.split('\n').find((l) => l.startsWith('Applies to:') && l.includes('`spontaneous`'));
+  assert.ok(applies?.includes('`candiboost`'), 'candiboost must sit in the same Applies to group as spontaneous');
+});
+
 test('the follow-up and the template both end with the Outbound text gate for kind email', () => {
   const gate = /Run the Outbound text gate \(`modes\/_writing\.md`\), kind `email`/g;
   assert.ok((mode.match(gate) ?? []).length >= 2, 'follow and template must each run the gate');
