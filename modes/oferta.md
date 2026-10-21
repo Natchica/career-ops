@@ -620,12 +620,15 @@ After saving the report and recording in the tracker, append a cover letter draf
 
 **How to generate the draft:**
 
-1. Read `cv.md` — select 4 achievement bullets most relevant to the JD's top requirements (exact wording, real metrics only)
-2. Read `config/profile.yml` — extract candidate name, current role, years of experience
-3. Write a 2-sentence opening based on the role title and JD mission language
-4. Write a 1-paragraph profile intro from the cv.md summary, adapted to the JD domain
-5. Leave the "Problems / Why this company / Approach" section as a placeholder — this requires user input
-6. Detect and flag any gaps (domain mismatch, language requirement, start date urgency) so the user sees them immediately
+1. Read `cv.md` — select 2-3 claims most relevant to the JD's top requirements (exact wording, real metrics only)
+2. Read `config/profile.yml` — extract the candidate name and current role (no years of experience: the scope is stated, not the tenure, per `voice-dna.md` §1)
+3. Write the opening: one fact from the JD about what the team builds or how it works, then the role
+4. Write the proof: the 2-3 claims from step 1, each with its number
+5. Leave the objective as a placeholder — it is the candidate's own statement of intent and requires user input
+6. Write the closing: the interview call to action and the availability date from `config/profile.yml`
+7. Detect and flag any gaps (domain mismatch, language requirement, start date urgency) so the user sees them immediately
+
+The structure is the letter contract, `voice-dna.md` §1: prose paragraphs, no bullets, no bold.
 
 **Draft format to append to the report:**
 
@@ -637,23 +640,15 @@ After saving the report and recording in the tracker, append a cover letter draf
 
 ---
 
-**Opening** *(placeholder — refine with your "why this role" angle)*
-{2-sentence opening based on JD role title and mission language}
+Structure: `voice-dna.md` §1
 
-**Profile introduction**
-{1 paragraph from cv.md summary, adapted to JD domain and required competencies}
+{opening: one fact from the JD + the role}
 
-**Key achievements** *(selected from cv.md — exact wording preserved)*
-- **{lead from cv.md},** {impact sentence with metric}.
-- **{lead from cv.md},** {impact sentence with metric}.
-- **{lead from cv.md},** {impact sentence with metric}.
-- **{lead from cv.md},** {impact sentence with metric}.
+{proof: 2-3 claims from cv.md with numbers}
 
-**Problems I will solve** *(placeholder — requires company research + your input)*
-> To be completed: what challenges does {company} face that you'd address? How would you approach them?
+{objective: placeholder, requires the candidate}
 
-**Closing**
-I am happy to discuss further at your convenience.
+{closing: interview call to action + availability}
 
 ---
 
@@ -667,7 +662,7 @@ I am happy to discuss further at your convenience.
 *Run `/career-ops cover {slug}` to complete angles, confirm company research, and generate the PDF.*
 ```
 
-Apply all language rules from `_writing.md` Professional Writing section to the draft content. No em dashes, no buzzwords, active voice, concrete claims only.
+Apply `voice-dna.md` §1 and §3 together with the language rules from `_writing.md` Professional Writing section to the draft content. No em dashes, no buzzwords, active voice, concrete claims only.
 
 ---
 
