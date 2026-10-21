@@ -546,6 +546,40 @@ rules:
     lang: all
     must_not_flag: A long sentence that carries one idea.
 
+  - id: '29'
+    name: Agentless passive
+    source: { skill: cursor/plugins@unslop, rule: '29' }
+    severity: warn
+    detect: passive
+    scope: prose
+    kinds: [letter, email, message, answer, text]
+    lang: [en]
+    auxiliaries: [am, is, are, was, were, be, been, being]
+    irregular: [built, made, done, run, set, kept, held, led, sent, shown, known, given, taken, written, seen, found, put, cut, chosen, drawn, grown, spent, paid, sold, told, brought, bought, caught, taught, won, shut, split]
+    allow: [attached, based, located, interested, experienced, qualified, required, involved, enclosed, scheduled, committed, dedicated, skilled, specialized, specialised, focused, certified, registered, authorized, authorised, licensed, pleased, convinced, used, married, born]
+    not_participles: [open, often, even, seven, eleven, ten, citizen, garden, golden, sudden, children, women, men, kitchen, heaven, oven, linen, sweden, bern, baden, speed, feed, seed, bleed, breed, indeed, exceed, proceed, succeed, hundred, shed, bred, fled]
+    must_not_flag: >-
+      Adjectival participles (My CV is attached; I am based in Sentheim; I am
+      interested in the role), -en words that are not participles (open, citizen),
+      a passive with a named actor (reviewed by a second engineer). voice-dna.md
+      section 1 block 9 prescribes "My CV is attached". Off in kind cv.
+
+  - id: '30'
+    name: Adverb density
+    source: { skill: cursor/plugins@unslop, rule: '30' }
+    severity: warn
+    detect: adverb-density
+    scope: prose
+    kinds: all
+    lang: [en]
+    threshold_per_100: 3
+    min_hits: 2
+    not_adverbs: [only, early, daily, weekly, monthly, yearly, quarterly, hourly, family, apply, reply, supply, rely, ally, rally, july, italy, assembly, likely, unlikely, friendly, lovely, costly, timely, elderly, orderly, holy, ugly, silly, imply, comply, multiply, anomaly, fly, sicily]
+    must_not_flag: >-
+      Words that end in -ly but are not adverbs (daily, only, early, family, July,
+      likely), and a low density over a long text. Density is computed over the
+      whole prose, never per paragraph.
+
   - id: '31'
     name: Plain-word map
     source: { skill: cursor/plugins@unslop, rule: '31' }
