@@ -66,6 +66,10 @@ _Avoid_: profile, candidate summary, dossier
 The list of decisions attached to every letter or email draft that only the candidate can take: the motivation fact and its source, the objective sentence, the wording of a gap, the salutation name, the German sentence, the attached files. A draft is shown once, with its Open items; there is no confirmation before drafting.
 _Avoid_: gates, prompts, questions (the pre-draft confirmations this replaced), TODOs
 
+**Outbound text gate**:
+The closing step of every text-writing workflow: the draft is scanned by `unslop.mjs`, repaired, checked for lost facts, and only then shown. It runs without any candidate action; what it cannot repair is listed under Open items, never presented as clean.
+_Avoid_: unslop mode, humanizer, filter, lint pass
+
 **Name-before-send**:
 The consent rule that a Cabinet names the end employer before the candidate authorizes their CV to be sent, one authorization per Mandate.
 _Avoid_: exclusivity, blanket authorization
