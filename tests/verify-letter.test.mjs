@@ -2,7 +2,7 @@
 // All fixtures are fictional (Jane Example, Example AG). Unit tests inject their own banned lists.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILTIN_BANNED, checkLetter, isGermanSentence, splitBody } from '../verify-letter.mjs';
+import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, splitBody } from '../verify-letter.mjs';
 
 const P1 = 'Example AG builds compliance software for Swiss banks, and your posting for a Backend Engineer describes a team that runs its own services from design to production. Since February 2024 I have been lead developer on three production Rust services and reviewer on three more in a decentralized cloud platform. That scope is the reason I am applying to a team where backend systems are the product.';
 const P2 = 'The strongest evidence is a rewrite. I profiled two Java middleware components, replaced them with Rust, and measured a 75% gain in core performance. Alongside that work, five Spring services moved from Java 11 to Java 17 and shipped together in one coordinated release. A second engineer reviewed each step before merge. The suite of more than 1,250 unit tests kept 100% coverage through every change, which let reviewers merge with confidence.';
@@ -184,4 +184,66 @@ test('every finding carries a code and a message', () => {
     assert.equal(typeof f.message, 'string');
     assert.ok(f.message.length > 10);
   }
+});
+
+const FR1 = "Exemple SA développe des logiciels de conformité pour les banques suisses, et votre annonce de développeur backend décrit une équipe qui exploite ses propres services, de la conception à la production. Depuis février 2024, je suis développeur principal de trois services Rust en production et relecteur de trois autres au sein d'une plateforme de cloud décentralisé. Cette responsabilité explique ma candidature auprès d'une équipe dont le produit repose sur des systèmes backend.";
+const FR2 = "La preuve la plus solide est une réécriture. J'ai profilé deux composants Java, puis je les ai remplacés par du Rust, avec un gain de 75% sur la performance du cœur. En parallèle, cinq services Spring sont passés de Java 11 à Java 17 et ont été livrés ensemble dans une version coordonnée. Un second ingénieur relisait chaque étape avant la fusion. Les plus de 1 250 tests unitaires ont conservé 100% de couverture à chaque changement, ce qui permettait aux relecteurs de fusionner en confiance.";
+const FR3 = "Dans ce poste, je vise la responsabilité d'un service de bout en bout : ses interfaces, ses modes de défaillance et son chemin de livraison. Je souhaite travailler là où des systèmes Rust ou Java portent le produit, parce que les décisions de conception y ont des conséquences visibles. Rust est mon premier choix, et Java en est un second de même rang. Votre équipe retrouvera chez moi les habitudes que montre le travail chez iExec : des changements petits, des résultats mesurés et des tests qui restent verts.";
+const FR4 = "Ma disponibilité commence le 29 octobre 2026, et Bâle se trouve à portée quotidienne. Citoyen français, je peux travailler en Suisse dans le cadre de la libre circulation UE-AELE. Je me réjouis d'un entretien, où je présenterai ces services plus en détail. Mon CV est joint, et les diplômes, certificats et références sont disponibles sur demande.";
+const wrapFr = (paragraphs) => ['Madame, Monsieur,', '', ...paragraphs.flatMap((p) => [p, '']), 'Veuillez agréer, Madame, Monsieur, mes meilleures salutations.', 'Jane Example'].join('\n');
+const CLEAN_FR_LETTER = wrapFr([FR1, FR2, FR3, FR4]);
+const FR_LETTER = { kind: 'letter', company: 'Exemple SA' };
+
+test('language is detected from le/la/je density and can be overridden', () => {
+  assert.equal(detectLang(CLEAN_FR_LETTER), 'fr');
+  assert.equal(detectLang(CLEAN_EN_LETTER), 'en');
+  assert.equal(detectLang(''), 'en');
+});
+
+const frWith = (snippet) => wrapFr([FR1, FR2, FR3.replace('Rust est mon premier choix', `Rust est mon premier choix, ${snippet}, et`), FR4]);
+const frHas = (snippet, code, opts = FR_LETTER) => codes(frWith(snippet), opts).includes(code);
+
+test('French conditionals are flagged, imperfects and look-alike nouns are not', () => {
+  const positives = ['aurais', 'pourrais', 'voudrais', 'souhaiterais', 'aimerais', 'serais', 'devrais', 'ferais', 'irais',
+    'me permettrait', 'vous pourriez', 'nous aimerions', 'il faudrait', 'ils voudraient'];
+  for (const word of positives) assert.equal(frHas(word, 'conditional'), true, `${word} should be flagged`);
+
+  const negatives = ["j'encadrais", "j'assurais", 'je gérais', 'il opérait', "j'intégrais", 'je configurais', 'il montrait',
+    'je livrais', 'je désirais', 'je tirais', 'frais', 'vrais', 'mais', 'désormais', 'portrait', 'trait', 'extrait', "j'aimais"];
+  for (const word of negatives) assert.equal(frHas(word, 'conditional'), false, `${word} should not be flagged`);
+
+  // The language override wins: the same text under English rules has no French conditional check.
+  assert.equal(frHas('aurais', 'conditional', { ...FR_LETTER, lang: 'en' }), false);
+});
+
+test('French negative formulations are flagged', () => {
+  for (const snippet of ["je n'ai pas", "je ne l'ai pas", 'il ne reste plus', 'jamais', 'aucune', "elle n'a rien"]) {
+    assert.equal(frHas(snippet, 'negative-formulation'), true, `${snippet} should be flagged`);
+  }
+  for (const snippet of ['une équipe de plus de 3', 'de plus', 'au Rhône', 'plus de 3 services']) {
+    assert.equal(frHas(snippet, 'negative-formulation'), false, `${snippet} should not be flagged`);
+  }
+});
+
+test('a clean French letter has no findings and Je/J\' count as sentence-initial I', () => {
+  assert.deepEqual(checkLetter(CLEAN_FR_LETTER, FR_LETTER), []);
+
+  const nine = (initial) => {
+    const sentences = [];
+    for (let i = 0; i < 8; i += 1) {
+      sentences.push(i < initial - 1
+        ? `${i % 2 ? "J'ai" : 'Je'} construit la partie ${i + 1} du service de Exemple SA avec des résultats mesurés et un cycle de livraison court.`
+        : `La partie ${i + 1} du service de Exemple SA est livrée avec des résultats mesurés et un cycle de livraison court.`);
+    }
+    sentences.push('Je vise la responsabilité complète, et un entretien couvrira ce point.');
+    return wrapFr([sentences.slice(0, 3).join(' '), sentences.slice(3, 6).join(' '), sentences.slice(6).join(' ')]);
+  };
+  const initialOnly = (text) => checkLetter(text, FR_LETTER).filter((f) => f.code === 'sentence-initial-i');
+  assert.deepEqual(initialOnly(nine(3)), []);
+  assert.equal(initialOnly(nine(4)).length, 1);
+
+  const noObjective = FR3.replace("je vise la responsabilité d'un service", "la responsabilité d'un service").replace('Je souhaite travailler là où des systèmes', 'Des systèmes').replace('portent le produit', 'portent le produit là-bas');
+  assert.deepEqual(codes(wrapFr([FR1, FR2, noObjective, FR4]), FR_LETTER), ['missing-objective']);
+  assert.deepEqual(codes(wrapFr([FR1, FR2, FR3, FR4.replace("d'un entretien", "d'un échange")]), FR_LETTER), ['missing-cta']);
+  assert.deepEqual(codes(wrapFr([FR1.replace('Exemple SA développe', "Je me permets de souligner qu'Exemple SA développe"), FR2, FR3, FR4]), FR_LETTER), ['filler-opener']);
 });
