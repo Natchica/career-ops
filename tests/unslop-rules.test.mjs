@@ -85,6 +85,55 @@ test('loadUnslopRules names the rule and field it rejects', () => {
   }
 });
 
+const sortedIds = (list) => list.map((r) => r.id).sort();
+const idsWhere = (predicate) => sortedIds(rules.filter(predicate));
+
+test('the catalogue matches the spec', () => {
+  assert.equal(rules.length, 38);
+
+  const bases = [...new Set(rules.filter((r) => parseInt(r.id, 10) <= 33).map((r) => parseInt(r.id, 10)))].sort((a, b) => a - b);
+  assert.deepEqual(bases, [3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]);
+  for (const rule of rules.filter((r) => parseInt(r.id, 10) <= 33)) {
+    assert.equal(rule.source.skill, 'cursor/plugins@unslop', `rule ${rule.id} cites cursor`);
+    assert.equal(rule.source.rule, String(parseInt(rule.id, 10)), `rule ${rule.id} cites cursor rule ${parseInt(rule.id, 10)}`);
+  }
+  for (const rule of rules.filter((r) => parseInt(r.id, 10) >= 34)) {
+    assert.notEqual(rule.source.skill, 'cursor/plugins@unslop', `rule ${rule.id} comes from another source`);
+  }
+
+  assert.deepEqual(idsWhere((r) => r.severity === 'block'), ['13', '15', '18', '19', '20', '22', '33', '34', '35', '36', '39', '40', '7', '9'].sort());
+  assert.deepEqual(idsWhere((r) => r.severity === 'warn'), ['12', '23', '24', '25', '26', '29', '3', '30', '31', '33b', '37', '38', '5', '7b', '8'].sort());
+  assert.deepEqual(idsWhere((r) => r.severity === 'none'), ['10', '11', '14', '16', '17', '27', '28', '32', '33c'].sort());
+});
+
+test('the catalogue kinds and languages match the spec', () => {
+  const kindsOf = (id) => rules.find((r) => r.id === id).kinds;
+  assert.deepEqual(kindsOf('12'), ['letter', 'email', 'message', 'answer', 'text']);
+  assert.deepEqual(kindsOf('29'), ['letter', 'email', 'message', 'answer', 'text']);
+  assert.deepEqual(kindsOf('15'), ['letter', 'email', 'message', 'text']);
+  assert.deepEqual(kindsOf('34'), ['letter', 'email', 'message', 'text']);
+  for (const id of ['33', '33b', '33c']) assert.deepEqual(kindsOf(id), ['letter', 'email', 'answer', 'text']);
+  assert.deepEqual(idsWhere((r) => r.kinds !== 'all'), ['12', '15', '29', '33', '33b', '33c', '34'].sort());
+
+  assert.deepEqual(idsWhere((r) => Array.isArray(r.lang) && r.lang.length === 2), ['19', '20', '22', '23', '25', '3', '39', '5', '9'].sort());
+  assert.deepEqual(
+    idsWhere((r) => r.lang === 'all' && r.detect !== null),
+    ['13', '15', '18', '33', '33b', '34', '35', '40'].sort(),
+  );
+  assert.ok(rules.filter((r) => r.lang === 'all' && r.detect === null).length === 9, 'the 9 reading checks apply to every language');
+  const englishOnly = rules.filter((r) => Array.isArray(r.lang) && r.lang.length === 1);
+  for (const rule of englishOnly) assert.deepEqual(rule.lang, ['en'], `rule ${rule.id} has an English list only`);
+});
+
+test('the French lists carry at least 20 entries and cannot_catch has 5', () => {
+  let french = 0;
+  for (const rule of rules) {
+    french += (rule.terms?.fr ?? []).length + (rule.patterns?.fr ?? []).length + Object.keys(rule.map?.fr ?? {}).length;
+  }
+  assert.ok(french >= 20, `expected at least 20 French entries, got ${french}`);
+  assert.equal(cannotCatch.length, 5);
+});
+
 /** Every regex source string a rule carries: patterns and except, per language. */
 function patternSources(rule) {
   const out = [];
