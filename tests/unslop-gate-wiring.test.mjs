@@ -37,3 +37,30 @@ test('excluded files never mention the gate', () => {
     assert.ok(!read(path).includes('Outbound text gate'), `${path} must not mention the Outbound text gate`);
   }
 });
+
+// [file, the kinds it names, whether it must carry its own read directive for modes/_writing.md]
+const GATED = [
+  ['modes/cover.md', ['letter'], false],
+  ['modes/email.md', ['email'], false],
+  ['modes/spontaneous.md', ['email'], true],
+  ['modes/contacto.md', ['message'], true],
+  ['modes/followup.md', ['message'], true],
+  ['modes/apply.md', ['answer'], true],
+  ['modes/cabinet.md', ['cv', 'message'], true],
+  ['modes/pdf.md', ['cv'], true],
+];
+
+for (const [path, kinds, ownRead] of GATED) {
+  test(`${path} ends its text step with the Outbound text gate for kind ${kinds.join(' and ')}`, () => {
+    const text = read(path);
+    for (const kind of kinds) {
+      assert.match(text, new RegExp(`Run the Outbound text gate \\(\`modes/_writing\\.md\`\\), kind \`${kind}\``, 'i'), `${path} must run the gate with kind ${kind}`);
+    }
+    if (ownRead) {
+      assert.match(text, /^\s*(?:[-*]\s+)?Read `modes\/_writing\.md`/m, `${path} does not load _writing.md, so it must read it explicitly`);
+    }
+    // The loop, the kind table and the repair contract live in _writing.md only.
+    assert.ok(!text.includes('### Repair contract'), `${path} must not copy the repair contract`);
+    assert.ok(!text.includes('| Kind | Texts |'), `${path} must not copy the kind table`);
+  });
+}
