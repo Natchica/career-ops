@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RADAR_COLUMNS, serializeRegistry } from '../radar/registry.mjs';
-import { GmailError, fetchSentThreads } from '../candiboost-sync.mjs';
+import { GmailError, fetchSentThreads, reserveInChunks } from '../candiboost-sync.mjs';
+import { REGISTRY_COLUMNS, readTable } from '../lib/candiboost.mjs';
+import { parseTrackerRow, resolveColumns } from '../tracker-parse.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FIXTURE_PATH = join(ROOT, 'tests', 'fixtures', 'candiboost', 'threads.json');
@@ -162,4 +164,131 @@ test('--summary shows counts, company names and skipped ids, no address and no c
   assert.ok(r.stdout.includes('Roche'));
   assert.ok(!r.stdout.includes('@'));
   for (const name of ['Huber', 'Weber', 'Keller', 'Meier', 'Brun', 'Frei', 'Morel']) assert.ok(!r.stdout.includes(name), name);
+});
+
+const trackerRows = (root) => {
+  const lines = readFileSync(join(root, 'data', 'applications.md'), 'utf-8').split('\n');
+  const colmap = resolveColumns(lines);
+  return lines.map((l) => parseTrackerRow(l, colmap)).filter(Boolean);
+};
+const registryRows = (root) => readTable(join(root, 'data', 'candiboost.tsv'), { key: 'thread_id', columns: REGISTRY_COLUMNS }).rows;
+const hashOf = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+const ADDITIONS = (root) => join(root, 'batch', 'tracker-additions');
+
+test('the first real run records sends in the tracker, phonebook, reply candidates and registry', () => {
+  const root = sandbox();
+  const r = sync(root, ['sync', '--threads-file', FIXTURE_PATH]);
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.dryRun, false);
+  assert.equal(out.new, 7);
+  assert.deepEqual(out.mergeFailed, []);
+  assert.equal(out.merged, 5);
+
+  const rows = trackerRows(root);
+  assert.deepEqual(rows.map((t) => t.num).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6]);
+  const byNum = Object.fromEntries(rows.map((t) => [t.num, t]));
+  assert.deepEqual([2, 3, 4, 5, 6].map((n) => byNum[n].company), ['BKB', 'ACME BANK', 'Pistor', 'adesso Schweiz', 'optimo-example.ch']);
+  for (const n of [2, 3, 4, 5, 6]) {
+    assert.equal(byNum[n].status, 'Applied');
+    assert.equal(byNum[n].score, 'N/A');
+    assert.equal(byNum[n].via, '—');
+    assert.equal(byNum[n].role, 'Spontaneous application');
+    assert.equal(byNum[n].notes, 'candiboost; contact type hiring contact');
+  }
+  assert.equal(byNum[1].status, 'Applied');
+  assert.match(byNum[1].notes, /candiboost send 2026-10-16/);
+
+  const merged = readdirSync(join(ADDITIONS(root), 'merged'));
+  assert.equal(merged.length, 5);
+  assert.deepEqual(readdirSync(ADDITIONS(root)).filter((f) => f.endsWith('.tsv')), []);
+  assert.deepEqual(readdirSync(join(root, 'reports')).filter((f) => f.includes('RESERVED')), []);
+
+  const contacts = readFileSync(join(root, 'data', 'contacts.tsv'), 'utf-8').split('\n').filter((l) => l && !l.startsWith('#'));
+  assert.equal(contacts.length, 7);
+  for (const line of contacts) {
+    const cells = line.split('\t');
+    assert.equal(cells.length, 9);
+    assert.equal(cells[2], 'other');
+    assert.match(cells[7], /^[2-6]$|^1$/);
+  }
+  assert.ok(contacts.some((l) => l.startsWith('Jean-Luc Morel\t')));
+
+  const candidates = JSON.parse(readFileSync(join(root, 'data', 'reply-candidates.json'), 'utf-8'));
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].message_id, 'cb0003r');
+  assert.equal(candidates[0].signal, null);
+
+  const reg = registryRows(root);
+  assert.equal(reg.length, 7);
+  const status = Object.fromEntries(reg.map((x) => [x.thread_id, x.status]));
+  assert.equal(status.cb0002, 'bounced');
+  assert.equal(status.cb0003, 'replied');
+  assert.equal(status.cb0001, 'sent');
+  assert.ok(reg.every((x) => x.tracker !== '' && x.followup === ''));
+  const num = Object.fromEntries(reg.map((x) => [x.thread_id, x.tracker]));
+  assert.equal(num.cb0001, num.cb0006);
+  assert.equal(num.cb0005, '1');
+  assert.equal(new Set(Object.values(num)).size, 6);
+});
+
+test('a second run writes nothing', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', FIXTURE_PATH]).status, 0);
+  const files = ['data/applications.md', 'data/contacts.tsv', 'data/reply-candidates.json', 'data/candiboost.tsv'].map((f) => join(root, f));
+  const before = files.map(hashOf);
+  const r = sync(root, ['sync', '--threads-file', FIXTURE_PATH]);
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.new, 0);
+  assert.equal(out.statusChanges, 0);
+  assert.equal(out.newTrackerRows, 0);
+  assert.deepEqual(files.map(hashOf), before);
+});
+
+test('a thread that gains a bounce changes only its registry status', () => {
+  const root = sandbox();
+  const early = FIXTURE.map((t) => (t.id === 'cb0002' ? { ...t, messages: t.messages.slice(0, 1) } : t));
+  const earlyPath = join(root, 'early.json');
+  writeFileSync(earlyPath, JSON.stringify(early));
+  assert.equal(sync(root, ['sync', '--threads-file', earlyPath]).status, 0);
+  assert.equal(registryRows(root).find((x) => x.thread_id === 'cb0002').status, 'sent');
+  const files = ['data/applications.md', 'data/contacts.tsv', 'data/reply-candidates.json'].map((f) => join(root, f));
+  const before = files.map(hashOf);
+  const regBefore = registryRows(root);
+  const r = sync(root, ['sync', '--threads-file', FIXTURE_PATH]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).statusChanges, 1);
+  assert.deepEqual(files.map(hashOf), before);
+  const regAfter = registryRows(root);
+  assert.equal(regAfter.find((x) => x.thread_id === 'cb0002').status, 'bounced');
+  assert.deepEqual(regAfter.filter((x) => x.thread_id !== 'cb0002'), regBefore.filter((x) => x.thread_id !== 'cb0002'));
+});
+
+test('a pending addition blocks the run and nothing is written', () => {
+  const root = sandbox();
+  mkdirSync(ADDITIONS(root), { recursive: true });
+  writeFileSync(join(ADDITIONS(root), '999-x.tsv'), 'num\tdate\n');
+  const before = listTree(root);
+  const r = sync(root, ['sync', '--threads-file', FIXTURE_PATH]);
+  assert.equal(r.status, 1);
+  assert.ok(r.stderr.includes('999-x.tsv'));
+  assert.ok(r.stderr.includes('node merge-tracker.mjs'));
+  assert.deepEqual(listTree(root), before);
+});
+
+test('reserveInChunks reserves at most 50 at a time and releases earlier chunks on failure', async () => {
+  const calls = [];
+  let next = 10;
+  const reserveFn = async (n) => { calls.push(n); const out = Array.from({ length: n }, () => next++); return out; };
+  const numbers = await reserveInChunks(120, reserveFn, async () => {});
+  assert.deepEqual(calls, [50, 50, 20]);
+  assert.equal(numbers.length, 120);
+  assert.equal(new Set(numbers).size, 120);
+
+  const released = [];
+  let n = 0;
+  const flaky = async (count) => { if (++n === 2) throw new Error('lock busy'); return Array.from({ length: count }, (_, i) => i + 1); };
+  await assert.rejects(reserveInChunks(120, flaky, async (chunk) => released.push(chunk.length)), /lock busy/);
+  assert.deepEqual(released, [50]);
 });
