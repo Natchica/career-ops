@@ -386,3 +386,42 @@ test('a clean text prints the passed line and exits 0', () => {
   assert.match(r.stdout, /Slop check passed \(kind text, lang en\): no findings\./);
   assert.match(r.stdout, /Not scanned \(reading check\): 10, 11, 14, 16, 17, 27, 28, 32, 33c/);
 });
+
+// Same fixtures as tests/verify-letter.test.mjs (clean letters that voice-dna.md section 1 prescribes).
+const P1 = 'Example AG builds compliance software for Swiss banks, and your posting for a Backend Engineer describes a team that runs its own services from design to production. Since February 2024 I have been lead developer on three production Rust services and reviewer on three more in a decentralized cloud platform. That scope is the reason I am applying to a team where backend systems are the product.';
+const P2 = 'The strongest evidence is a rewrite. I profiled two Java middleware components, replaced them with Rust, and measured a 75% gain in core performance. Alongside that work, five Spring services moved from Java 11 to Java 17 and shipped together in one coordinated release. A second engineer reviewed each step before merge. The suite of more than 1,250 unit tests kept 100% coverage through every change, which let reviewers merge with confidence.';
+const P3 = 'In this role I aim to own a service end to end: its interfaces, its failure modes and its release path. I want to work where Rust or Java systems carry the product, because that is where design decisions have visible consequences. Rust is my first choice, and Java is an equal one. Your team will see the same habits from me that the iExec work shows: small changes, measured results and tests that stay green.';
+const P4 = 'My availability starts on 29 October 2026, and Basel is within daily reach. As a French citizen I am eligible to work in Switzerland under EU-CH free movement. I look forward to an interview, where I will present these services in more detail. My CV is attached, and diplomas, certificates and references are available on request.';
+const FR1 = "Exemple SA développe des logiciels de conformité pour les banques suisses, et votre annonce de développeur backend décrit une équipe qui exploite ses propres services, de la conception à la production. Depuis février 2024, je suis développeur principal de trois services Rust en production et relecteur de trois autres au sein d'une plateforme de cloud décentralisé. Cette responsabilité explique ma candidature auprès d'une équipe dont le produit repose sur des systèmes backend.";
+const FR2 = "La preuve la plus solide est une réécriture. J'ai profilé deux composants Java, puis je les ai remplacés par du Rust, avec un gain de 75% sur la performance du cœur. En parallèle, cinq services Spring sont passés de Java 11 à Java 17 et ont été livrés ensemble dans une version coordonnée. Un second ingénieur relisait chaque étape avant la fusion. Les plus de 1 250 tests unitaires ont conservé 100% de couverture à chaque changement, ce qui permettait aux relecteurs de fusionner en confiance.";
+const FR3 = "Dans ce poste, je vise la responsabilité d'un service de bout en bout : ses interfaces, ses modes de défaillance et son chemin de livraison. Je souhaite travailler là où des systèmes Rust ou Java portent le produit, parce que les décisions de conception y ont des conséquences visibles. Rust est mon premier choix, et Java en est un second de même rang. Votre équipe retrouvera chez moi les habitudes que montre le travail chez iExec : des changements petits, des résultats mesurés et des tests qui restent verts.";
+const FR4 = "Ma disponibilité commence le 29 octobre 2026, et Bâle se trouve à portée quotidienne. Citoyen français, je peux travailler en Suisse dans le cadre de la libre circulation UE-AELE. Je me réjouis d'un entretien, où je présenterai ces services plus en détail. Mon CV est joint, et les diplômes, certificats et références sont disponibles sur demande.";
+
+const wrapEn = (paragraphs) => ['Dear Example AG team,', '', ...paragraphs.flatMap((p) => [p, '']), 'Kind regards,', 'Jane Example'].join('\n');
+const wrapFr = (paragraphs) => ['Madame, Monsieur,', '', ...paragraphs.flatMap((p) => [p, '']), 'Veuillez agréer, Madame, Monsieur, mes meilleures salutations.', 'Jane Example'].join('\n');
+
+test('the clean English letter and email have no findings in kinds letter and email', () => {
+  assert.deepEqual(scanText(wrapEn([P1, P2, P3, P4]), { kind: 'letter', lang: 'en' }).findings, []);
+  assert.deepEqual(scanText(wrapEn([P1, P3, P4]), { kind: 'email', lang: 'en' }).findings, []);
+});
+
+test('the clean French letter has no findings in kind letter, lang fr', () => {
+  assert.deepEqual(scanText(wrapFr([FR1, FR2, FR3, FR4]), { kind: 'letter', lang: 'fr' }).findings, []);
+});
+
+test('voice-dna precedence: parentheses, uniform sentence length and a direct question are never findings', () => {
+  assert.deepEqual(ids('I am eligible to work in Switzerland (permit G as a frontalier) from October.', { kind: 'email', lang: 'en' }), []);
+  const uniform = Array.from({ length: 6 }, (_, i) => `Service number ${i + 1} ships with a short release cycle and tests.`).join(' ');
+  assert.deepEqual(ids(uniform, { kind: 'email', lang: 'en' }), []);
+  assert.deepEqual(ids('Which stack does the Developer Team work in?', { kind: 'email', lang: 'en' }), []);
+});
+
+test('kind exemptions: rule 10 stays a reading check, bullets and arrows follow the kind', () => {
+  const { findings, skipped } = scanText('Plain text.', { kind: 'email' });
+  assert.deepEqual(findings, []);
+  assert.ok(skipped.some((s) => s.id === '10'));
+  assert.equal(has('- item one\n- item two', '34', { kind: 'answer' }), false);
+  assert.equal(has('- item one\n- item two', '34', { kind: 'cv' }), false);
+  assert.equal(has('Jenkins → GitHub Actions on all services.', '33', { kind: 'email' }), true);
+  assert.equal(has('Jenkins → GitHub Actions on all services.', '33', { kind: 'cv' }), false);
+});
