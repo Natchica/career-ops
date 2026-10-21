@@ -59,8 +59,8 @@ Run it only after the candidate confirms the reply was sent.
 
 ## template
 
-1. Rewrite the Candiboost template in French with three named slots, `[civilité]`, `[nom]` and `[ENTREPRISE]`. Facts about the candidate come only from `cv.md`. Apply `voice-dna.md` §1 and the Output Language directive below.
-2. Write the template to `/tmp/candiboost-template.txt`. Run the Outbound text gate (`modes/_writing.md`), kind `email`, with the scan command `node verify-letter.mjs /tmp/candiboost-template.txt --kind email --company "[ENTREPRISE]"`.
+1. Rewrite the Candiboost template in English, with the German B1 sentence from `config/profile.yml`, and three named slots, `[civilité]`, `[nom]` and `[ENTREPRISE]`. The template names no company fact, because it is sent unchanged to every company; say so under Open items. Facts about the candidate come only from `cv.md`. Apply `voice-dna.md` §1 and the Output Language directive below.
+2. Write the template to `/tmp/candiboost-template.txt`. The gate flags the three slots as leftover placeholders (rule 35), which is their purpose, so scan a filled sample instead: copy the file to `/tmp/candiboost-template.sample.txt` with `M.`, `Huber` and `Acme SA` in the slots and run the Outbound text gate (`modes/_writing.md`), kind `email`, with the scan command `node verify-letter.mjs /tmp/candiboost-template.sample.txt --kind email --company "Acme SA"`. Repair the wording in the template and rebuild the sample. State under Open items that the sample was scanned and the slots were not.
 3. Save `output/candiboost/template-{YYYY-MM-DD}.md` with the corrected template and under `## Checks` the last scan output and the Open items. The candidate pastes it into "Modifier l'envoi" on Candiboost and maps the three slots to Candiboost's own placeholders themselves.
     Read `modes/_writing.md` → Outbound text gate before step 2; this mode does not load it otherwise.
 
@@ -73,4 +73,4 @@ Run it only after the candidate confirms the reply was sent.
 
 ## Output Language
 
-Write all human-facing output in `{language.output}` from `config/profile.yml` regardless of the language of these instructions or the company's pages. `language.output` is authoritative for prose; `modes/_custom.md` house rules apply on top of it. The follow-up email is English and the template is French, as the steps above state: those two texts follow the step, not `language.output`.
+Write all human-facing output in `{language.output}` from `config/profile.yml` regardless of the language of these instructions or the company's pages. `language.output` is authoritative for prose; `modes/_custom.md` house rules apply on top of it. The follow-up email and the template are both English, as the steps above state: those two texts follow the step, not `language.output`.
