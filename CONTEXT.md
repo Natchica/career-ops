@@ -62,6 +62,10 @@ _Avoid_: cold application (collides with cold outreach in `contacto`), unsolicit
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
 
+**Open items**:
+The list of decisions attached to every letter or email draft that only the candidate can take: the motivation fact and its source, the objective sentence, the wording of a gap, the salutation name, the German sentence, the attached files. A draft is shown once, with its Open items; there is no confirmation before drafting.
+_Avoid_: gates, prompts, questions (the pre-draft confirmations this replaced), TODOs
+
 **Name-before-send**:
 The consent rule that a Cabinet names the end employer before the candidate authorizes their CV to be sent, one authorization per Mandate.
 _Avoid_: exclusivity, blanket authorization
