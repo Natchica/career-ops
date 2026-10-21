@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { RADAR_COLUMNS, serializeRegistry } from '../radar/registry.mjs';
 import { GmailError, fetchSentThreads, rankFollowups, reserveInChunks } from '../candiboost-sync.mjs';
 import { REGISTRY_COLUMNS, readTable } from '../lib/candiboost.mjs';
 import { parseTrackerRow, resolveColumns } from '../tracker-parse.mjs';
+import { listTree as walkFiles } from '../lib/walk-tree.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const FIXTURE_PATH = join(ROOT, 'tests', 'fixtures', 'candiboost', 'threads.json');
@@ -39,15 +40,10 @@ function sandbox() {
   return dir;
 }
 
-function listTree(dir, base = dir) {
-  const out = [];
-  for (const name of readdirSync(dir).sort()) {
-    const path = join(dir, name);
-    const rel = path.slice(base.length + 1);
-    if (statSync(path).isDirectory()) { out.push(`${rel}/`); out.push(...listTree(path, base)); }
-    else out.push(`${rel}:${createHash('sha256').update(readFileSync(path)).digest('hex')}`);
-  }
-  return out;
+function listTree(dir) {
+  return walkFiles(dir)
+    .map((path) => `${path.slice(dir.length + 1)}:${createHash('sha256').update(readFileSync(path)).digest('hex')}`)
+    .sort();
 }
 
 function sync(root, args, envOver = {}) {
