@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RADAR_COLUMNS, serializeRegistry } from '../radar/registry.mjs';
-import { GmailError, fetchSentThreads, reserveInChunks } from '../candiboost-sync.mjs';
+import { GmailError, fetchSentThreads, rankFollowups, reserveInChunks } from '../candiboost-sync.mjs';
 import { REGISTRY_COLUMNS, readTable } from '../lib/candiboost.mjs';
 import { parseTrackerRow, resolveColumns } from '../tracker-parse.mjs';
 
@@ -275,6 +275,147 @@ test('a pending addition blocks the run and nothing is written', () => {
   assert.ok(r.stderr.includes('999-x.tsv'));
   assert.ok(r.stderr.includes('node merge-tracker.mjs'));
   assert.deepEqual(listTree(root), before);
+});
+
+const send = (over) => ({
+  thread_id: 't', sent_at: '2026-10-10', domain: 'a.ch', company: 'A', radar_key: '', to_email: 'x@a.ch', contact_name: 'X',
+  civility: 'M.', status: 'sent', tracker: '2', followup: '', ...over,
+});
+const rankOpts = (over = {}) => ({
+  today: '2026-10-22', tierOf: () => '', trackerStatusOf: () => 'Applied', isBlacklisted: () => false, ...over,
+});
+
+test('rankFollowups keeps only due, unanswered, untouched Applied sends', () => {
+  const rows = [
+    send({ thread_id: 'ok' }),
+    send({ thread_id: 'young', sent_at: '2026-10-16' }),
+    send({ thread_id: 'edge', sent_at: '2026-10-15' }),
+    send({ thread_id: 'bounced', status: 'bounced' }),
+    send({ thread_id: 'replied', status: 'replied' }),
+    send({ thread_id: 'done', followup: '2026-10-20' }),
+    send({ thread_id: 'rejected', tracker: '9' }),
+  ];
+  const out = rankFollowups(rows, rankOpts({ trackerStatusOf: (r) => (r.tracker === '9' ? 'Rejected' : 'Applied') }));
+  assert.deepEqual(out.picks.map((p) => p.thread_id), ['ok', 'edge']);
+});
+
+test('rankFollowups orders by tier, then older send, then domain', () => {
+  const tiers = { k1: '1', k2: '2', k3: '3' };
+  const rows = [
+    send({ thread_id: 'un', domain: 'u.ch' }),
+    send({ thread_id: 't3', radar_key: 'k3' }),
+    send({ thread_id: 't2', radar_key: 'k2' }),
+    send({ thread_id: 't1new', radar_key: 'k1', sent_at: '2026-10-12' }),
+    send({ thread_id: 't1old', radar_key: 'k1', sent_at: '2026-10-08' }),
+    send({ thread_id: 't1b', radar_key: 'k1', sent_at: '2026-10-08', domain: 'b.ch' }),
+  ];
+  const out = rankFollowups(rows, rankOpts({ tierOf: (r) => tiers[r.radar_key] ?? '', count: 2 }));
+  assert.deepEqual(out.picks.map((p) => p.thread_id), ['t1old', 't1b']);
+  const all = rankFollowups(rows, rankOpts({ tierOf: (r) => tiers[r.radar_key] ?? '', count: 99 }));
+  assert.equal(all.picks.length, 2);
+  const wide = (count) => rankFollowups(rows, rankOpts({ tierOf: (r) => tiers[r.radar_key] ?? '', count })).picks.map((p) => p.thread_id);
+  assert.deepEqual(wide(0), ['t1old']);
+  assert.deepEqual(wide(undefined), ['t1old', 't1b']);
+});
+
+test('rankFollowups drops tier out and blacklisted sends and counts them', () => {
+  const rows = [
+    send({ thread_id: 'out', radar_key: 'o' }),
+    send({ thread_id: 'bl', company: 'Blocked' }),
+    send({ thread_id: 'fine', domain: 'f.ch' }),
+  ];
+  const out = rankFollowups(rows, rankOpts({ tierOf: (r) => (r.radar_key === 'o' ? 'out' : ''), isBlacklisted: (r) => r.company === 'Blocked' }));
+  assert.deepEqual(out.picks.map((p) => p.thread_id), ['fine']);
+  assert.deepEqual(out.excluded, { out: 1, blacklisted: 1 });
+});
+
+function datedFixture(root, daysAgo) {
+  const base = Date.now() - daysAgo * 86_400_000;
+  const threads = FIXTURE.map((t) => ({
+    ...t,
+    messages: t.messages.map((m, i) => ({ ...m, internalDate: String(base + i * 3_600_000) })),
+  }));
+  const path = join(root, 'dated.json');
+  writeFileSync(path, JSON.stringify(threads));
+  return path;
+}
+
+test('pick lists the due follow-ups with their fields and writes nothing', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', datedFixture(root, 10)]).status, 0);
+  const before = listTree(root);
+  const r = sync(root, ['pick']);
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.picks.map((p) => p.thread_id), ['cb0004', 'cb0001']);
+  const first = out.picks[0];
+  assert.deepEqual(Object.keys(first).sort(), ['civility', 'company', 'contact_name', 'days', 'domain', 'gmail_url', 'radar_key', 'sent_at', 'thread_id', 'tier', 'tracker'].sort());
+  assert.equal(first.tier, '1');
+  assert.equal(first.days, 10);
+  assert.equal(first.gmail_url, 'https://mail.google.com/mail/u/0/#all/cb0004');
+  assert.equal(first.radar_key, 'adesso schweiz');
+  assert.equal(first.contact_name, 'Lukas Meier');
+  assert.deepEqual(listTree(root), before);
+  assert.equal(JSON.parse(sync(root, ['pick', '--count', '1']).stdout).picks.length, 1);
+  assert.equal(JSON.parse(sync(root, ['pick', '--count', '9']).stdout).picks.length, 2);
+});
+
+test('pick --domain shows the rows of one domain with a reason for each ineligible one', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', datedFixture(root, 10)]).status, 0);
+  const bkb = JSON.parse(sync(root, ['pick', '--domain', 'bkb.ch']).stdout);
+  assert.deepEqual(bkb.rows.map((x) => [x.thread_id, x.eligible]), [['cb0001', true], ['cb0006', true]]);
+  const acme = JSON.parse(sync(root, ['pick', '--domain', 'acme-bank.com']).stdout);
+  assert.equal(acme.rows[0].eligible, false);
+  assert.match(acme.rows[0].reason, /bounced/);
+  const none = sync(root, ['pick', '--domain', 'nowhere.example']);
+  assert.equal(none.status, 0);
+  assert.deepEqual(JSON.parse(none.stdout).rows, []);
+});
+
+test('pick --summary prints a line per pick', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', datedFixture(root, 10)]).status, 0);
+  const r = sync(root, ['pick', '--summary']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /adesso Schweiz/);
+  assert.match(r.stdout, /https:\/\/mail\.google\.com\/mail\/u\/0\/#all\/cb0004/);
+});
+
+test('mark followed sets only the followup cell', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', FIXTURE_PATH]).status, 0);
+  const before = registryRows(root);
+  const r = sync(root, ['mark', 'cb0001', 'followed', '--date', '2026-10-25']);
+  assert.equal(r.status, 0, r.stderr);
+  const after = registryRows(root);
+  assert.equal(after.find((x) => x.thread_id === 'cb0001').followup, '2026-10-25');
+  assert.deepEqual(after.filter((x) => x.thread_id !== 'cb0001'), before.filter((x) => x.thread_id !== 'cb0001'));
+  assert.deepEqual({ ...after.find((x) => x.thread_id === 'cb0001'), followup: '' }, before.find((x) => x.thread_id === 'cb0001'));
+
+  const file = join(root, 'data', 'candiboost.tsv');
+  const hash = hashOf(file);
+  assert.equal(sync(root, ['mark', 'cb0001', 'followed', '--date', '2026-10-25']).status, 0);
+  assert.equal(hashOf(file), hash);
+  assert.equal(sync(root, ['mark', 'cb0001', 'followed', '--date', '2026-10-26']).status, 3);
+  assert.equal(hashOf(file), hash);
+});
+
+test('mark followed without a date uses today', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', FIXTURE_PATH]).status, 0);
+  assert.equal(sync(root, ['mark', 'cb0005', 'followed']).status, 0);
+  assert.match(registryRows(root).find((x) => x.thread_id === 'cb0005').followup, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('mark refuses an unknown thread, a bad date and a bad state', () => {
+  const root = sandbox();
+  assert.equal(sync(root, ['sync', '--threads-file', FIXTURE_PATH]).status, 0);
+  assert.equal(sync(root, ['mark', 'nope', 'followed']).status, 2);
+  assert.equal(sync(root, ['mark', 'cb0001', 'followed', '--date', '2026-13-40']).status, 1);
+  assert.equal(sync(root, ['mark', 'cb0001', 'followed', '--date', 'tomorrow']).status, 1);
+  assert.equal(sync(root, ['mark', 'cb0001', 'sent']).status, 1);
+  assert.equal(sync(root, ['mark', 'cb0001']).status, 1);
 });
 
 test('reserveInChunks reserves at most 50 at a time and releases earlier chunks on failure', async () => {
