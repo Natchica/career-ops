@@ -61,6 +61,12 @@ test('spontaneous tells the candidate to delete the Candiboost row and never cli
   assert.match(spontaneous, /never click/);
 });
 
+test('followup routes Candiboost sends to the candiboost mode instead of drafting them', () => {
+  const followup = read('modes/followup.md');
+  assert.ok(followup.includes('candiboost'));
+  assert.ok(followup.includes('/career-ops candiboost follow'));
+});
+
 test('the follow-up and the template both end with the Outbound text gate for kind email', () => {
   const gate = /Run the Outbound text gate \(`modes\/_writing\.md`\), kind `email`/g;
   assert.ok((mode.match(gate) ?? []).length >= 2, 'follow and template must each run the gate');
