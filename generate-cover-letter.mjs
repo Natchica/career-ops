@@ -263,6 +263,26 @@ function buildAchievementsBlock(achievements) {
   return `<ul class="achievements">\n${items}\n  </ul>`;
 }
 
+/** Build the optional Objet (subject) line of a Swiss-style letter. */
+function buildObjetLine(letter) {
+  const objet = String(letter.objet ?? "").trim();
+  return objet ? `<div class="objet">${escapeHtml(objet)}</div>` : "";
+}
+
+/** Build the optional Annexes line: a label followed by the attached files. */
+function buildAnnexesBlock(letter) {
+  const annexes = letter.annexes;
+  if (annexes == null) return "";
+  if (!Array.isArray(annexes) || annexes.some((item) => typeof item !== "string")) {
+    throw new Error("letter.annexes must be an array of strings");
+  }
+  const items = annexes.map((item) => item.trim()).filter(Boolean);
+  if (!items.length) return "";
+  const label = String(letter.annexes_label ?? "Annexes:").trim();
+  const text = [escapeHtml(label), items.map(escapeHtml).join(", ")].filter(Boolean).join(" ");
+  return `<p class="annexes">${text}</p>`;
+}
+
 /** Build the optional footnotes block with escaped links. */
 function buildFootnotesBlock(footnotes) {
   if (!footnotes || !footnotes.length) return "";
@@ -347,6 +367,10 @@ export function buildHtml(payload, templatePath) {
   // {{RECIPIENT_BLOCK}}, so a payload carrying a recipient would otherwise lose
   // the company and city entirely — dropped from the dateline, with no address
   // block downstream to reprint them.
+  const annexesBlock = buildAnnexesBlock(letter);
+  if (annexesBlock && !html.includes("{{ANNEXES_BLOCK}}")) {
+    console.error("Warning: letter.annexes is set but this template has no {{ANNEXES_BLOCK}} slot; the Annexes line is not rendered.");
+  }
   const rendersRecipientBlock = Boolean(recipientBlock) && html.includes("{{RECIPIENT_BLOCK}}");
   const replacements = {
     "{{NAME}}": escapeHtml(candidate.name),
@@ -364,6 +388,8 @@ export function buildHtml(payload, templatePath) {
     "{{LANGUAGE_CLOSING_BLOCK}}": languageClosingBlock,
     "{{SIGNATURE_BLOCK}}": signatureBlock,
     "{{FOOTNOTES_BLOCK}}": buildFootnotesBlock(letter.footnotes),
+    "{{OBJET_LINE}}": buildObjetLine(letter),
+    "{{ANNEXES_BLOCK}}": annexesBlock,
   };
 
   // Single-pass substitution: each {{TOKEN}} is replaced exactly once against
