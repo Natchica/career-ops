@@ -50,12 +50,17 @@ export function detectMatchList(ctx, rule) {
   const terms = [...(rule.terms?.all ?? []), ...(rule.terms?.[ctx.lang] ?? [])];
   const sources = [...(rule.patterns?.all ?? []), ...(rule.patterns?.[ctx.lang] ?? [])];
   const regexes = [...(terms.length ? [termRe(terms)] : []), ...sources.map((source) => new RegExp(source, flagsFor(rule)))];
+  const exceptions = (rule.except ?? []).map((source) => new RegExp(source, 'iu'));
   const subjects = rule.scope === 'text' ? [ctx.text] : ctx.paragraphs;
   const hits = [];
   for (const subject of subjects) {
     for (const re of regexes) {
       for (const m of subject.matchAll(re)) {
         if (m[0] === '') continue;
+        // A capitalised word inside a sentence is read as a name (MongoDB Realm), unless it opens one.
+        if (rule.skip_proper_nouns && /^\p{Lu}/u.test(m[0]) && !/(?:^|[.!?]\s+)$/.test(subject.slice(0, m.index))) continue;
+        const window = subject.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+        if (exceptions.some((re) => re.test(window))) continue;
         hits.push({ term: m[0], context: contextAround(subject, m.index, m[0].length) });
       }
     }
