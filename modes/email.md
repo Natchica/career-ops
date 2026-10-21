@@ -526,15 +526,16 @@ additions.
 
 ---
 
-## Step 6 — Check the body
+## Step 6 — Outbound text gate
 
-For `hr_application` and `cold_application` only. Write the email body (salutation to name) to `/tmp/email-body-{company-slug}.txt`, a check input and not a saved draft, and run:
+Run the Outbound text gate (`modes/_writing.md`), kind `email`, on every variant before the Output. Write the Subject line and the body (salutation to name) to `/tmp/email-body-{company-slug}.txt`, a check input and not a saved draft; never the attachment checklist.
 
 ```bash
-node verify-letter.mjs /tmp/email-body-{company-slug}.txt --kind email --company "{company}"
+node verify-letter.mjs /tmp/email-body-{company-slug}.txt --kind email --company "{company}"   # hr_application, cold_application
+node unslop.mjs /tmp/email-body-{company-slug}.txt --kind email --lang {lang}   # referral_request, process_stuck, confirmed_time_noshow
 ```
 
-The checker is warn-only. Fix every finding that rewording solves, run it once more, and show the findings that remain after the draft. A finding left in place is a decision for the candidate, so it goes into the Open items.
+A finding left in place is a decision for the candidate, so it goes into the Open items.
 
 ## Output
 
@@ -545,9 +546,9 @@ Return in this order:
    - Variant
    - Language
 2. Attachment checklist, unless disabled
-3. Subject and email body
-4. For `hr_application` and `cold_application`: the `verify-letter.mjs` findings, or "Letter check passed: no findings."
-5. **Open items**, one line each, only those that apply: the company fact in the opening with its source URL, the objective sentence, how a gap is worded, the salutation name and where it came from (or `[confirm name]`), the German sentence, the attached files
+3. Subject and email body, as corrected by the gate
+4. The last scan line (`Letter check passed: no findings.` or `Slop check passed ...`), or the findings it left
+5. **Open items**, one line each, only those that apply: the company fact in the opening with its source URL, the objective sentence, how a gap is worded, the salutation name and where it came from (or `[confirm name]`), the German sentence, the attached files, the findings the Outbound text gate left
 6. One-line note with any missing inputs or assumptions
 
 Do not write files unless the user explicitly asks to save the draft.
