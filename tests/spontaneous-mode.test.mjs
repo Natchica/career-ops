@@ -25,6 +25,9 @@ test('the mode names every script and mode it depends on', () => {
     'merge-tracker.mjs',
     'reserve-report-num.mjs',
     'verify-cv-facts.mjs',
+    'verify-letter.mjs',
+    '## Checks',
+    '`voice-dna.md` §1',
     'No JD — Spontaneous application to a Radar Prospect',
   ]) assert.ok(mode.includes(needle), `modes/spontaneous.md does not mention ${needle}`);
 });
