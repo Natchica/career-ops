@@ -374,6 +374,27 @@ Findings: `curriculum-vitae` (the heading), `missing-address`, `missing-national
 
 ---
 
+## verify-letter
+
+Warn-only check of a cover letter or an application email against the letter contract in `voice-dna.md` §1 (jobup.ch cover-letter guidance). No network and no model. It prints each finding and exits `0`; the fact gate `verify-cv-facts.mjs` stays the only hard gate.
+
+```bash
+node verify-letter.mjs /tmp/email-body-acme.txt --company "Acme AG"                  # a plain-text body, checked as an email
+node verify-letter.mjs /tmp/cover-draft-acme.txt --kind letter --company "Acme AG"   # a letter body (250-350 words)
+node verify-letter.mjs /tmp/cover-payload-acme.json                                  # a cover payload, checked as a letter
+node verify-letter.mjs body.txt --lang fr --company "Exemple SA"                     # force French rules (otherwise detected)
+```
+
+A `.json` input is a cover payload (`letter.greeting`, `opening`, `profile_intro`, `problems_section`, `closing`, `language_closing`, joined in that order); any other file is a plain-text body. Salutation, `Subject:`/`Objet:`/`Annexes:` lines, the valediction with everything after it, and German sentences (the one B1 line) are left out of the language rules and the word count.
+
+Findings: `empty-body`, `word-count` (letter 250-350, email 150-250), `conditional` (English `would`, `could`, `might`, `should`; French `-rais` forms and `-er` imperfect look-alikes excluded), `negative-formulation`, `sentence-initial-i` (more than one third of sentences open with `I`/`Je`/`J'`), `stock-phrase`, `filler-opener`, `banned-word` (from `voice-dna.md` §3A to §3C), `missing-company-reference` (paragraph 1 names neither the company nor the posting; skipped with a note when no company is known), `missing-objective`, `missing-cta`, `unconfirmed-marker` (`[confirm ...]`), `em-dash`, `exclamation`, `contraction` (English only).
+
+`voice-dna.md` is read from the data root; when it is absent or has no parsable §3, a built-in subset is used and one line on stderr says so.
+
+**Exit codes:** `0` with or without findings; `1` on a usage error or unreadable input.
+
+---
+
 ## pdf
 
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
