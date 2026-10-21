@@ -12,7 +12,8 @@
  * replies are untrusted data. See modes/candiboost.md.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getCareerOpsRoot, resolveTrackerPath } from './path-resolver.mjs';
@@ -20,10 +21,14 @@ import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { unescapeFormulaCell } from './lib/tsv-formula-escape.mjs';
 import { parseTrackerRow, resolveColumns } from './tracker-parse.mjs';
-import { CLI_EXIT } from './tracker-utils.mjs';
+import { CLI_EXIT, normalizeCompany, writeFileAtomic } from './tracker-utils.mjs';
+import { withPipelineLock } from './pipeline-lock.mjs';
 import { readRegistry, registryPath } from './radar/registry.mjs';
+import { releaseReportNumbers, reserveReportNumbers } from './reserve-report-num.mjs';
+import { appendCandidate } from './paste-reply.mjs';
+import { slugifyCompany } from './lib/tracker-addition.mjs';
 import {
-  REGISTRY_COLUMNS, buildProspectIndex, parseThread, planSync, readTable,
+  REGISTRY_COLUMNS, additionTsv, buildProspectIndex, contactLine, parseThread, planSync, readTable, updateTable,
 } from './lib/candiboost.mjs';
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -188,6 +193,127 @@ function renderSummary(out) {
   return lines.join('\n');
 }
 
+const MAX_RESERVE = 50;
+
+/**
+ * Reserve `count` report numbers in chunks of at most 50. A failure releases
+ * the chunks already taken. The returned array carries its chunks in a
+ * non-enumerable `chunks` property so the caller can release each one.
+ */
+export async function reserveInChunks(count, reserveFn, releaseFn) {
+  const chunks = [];
+  try {
+    for (let left = count; left > 0; left -= MAX_RESERVE) chunks.push(await reserveFn(Math.min(MAX_RESERVE, left)));
+  } catch (e) {
+    for (const chunk of chunks) await releaseFn(chunk);
+    throw e;
+  }
+  const numbers = chunks.flat();
+  Object.defineProperty(numbers, 'chunks', { value: chunks });
+  return numbers;
+}
+
+const rangeOf = (chunk) => (chunk.length === 1 ? String(chunk[0]) : `${chunk[0]}-${chunk[chunk.length - 1]}`);
+
+function runScript(script, args, root) {
+  return spawnSync(process.execPath, [join(CODE_ROOT, script), ...args], {
+    cwd: CODE_ROOT,
+    encoding: 'utf-8',
+    timeout: 300_000,
+    env: { ...process.env, CAREER_OPS_ROOT: root },
+  });
+}
+
+const CONTACTS_HEADER = '# name\tcompany\ttype\ttitle\tphone\temail\tlinkedin\ttracker\tnotes';
+
+async function appendContacts(path, records, numOf) {
+  mkdirSync(dirname(path), { recursive: true });
+  return withPipelineLock(path, () => {
+    let text = existsSync(path) ? readFileSync(path, 'utf-8') : `${CONTACTS_HEADER}\n`;
+    if (!text.endsWith('\n')) text += '\n';
+    const emails = readContactEmails(path);
+    let added = 0;
+    for (const r of records) {
+      const email = r.to_email.toLowerCase();
+      if (!r.contact_name || emails.has(email)) continue;
+      emails.add(email);
+      text += `${contactLine({ name: r.contact_name, company: r.company, email: r.to_email, tracker: numOf.get(r.thread_id), date: r.sent_at })}\n`;
+      added++;
+    }
+    if (added) writeFileAtomic(path, text);
+    return added;
+  });
+}
+
+/**
+ * The real write, in an order where every step is idempotent or deduplicated:
+ * reserve, TSVs, merge-tracker, confirm, release, set-status notes, contacts,
+ * reply candidates, registry (last). A crash before the registry write heals on
+ * the next run.
+ */
+async function writeSync({ root, plan, trackerRows, newReplies }) {
+  const groups = plan.trackerPlan.newCompanies;
+  const numOf = new Map();
+  const failed = new Set();
+  const result = { reservations: [], merged: 0, mergeFailed: [], noteFailed: [] };
+
+  if (groups.length) {
+    const reserveFn = (n) => reserveReportNumbers(n, { rootDir: root });
+    const releaseFn = (chunk) => releaseReportNumbers(chunk, { rootDir: root });
+    const numbers = await reserveInChunks(groups.length, reserveFn, releaseFn);
+    result.reservations = numbers.chunks.map(rangeOf);
+    try {
+      const additions = join(root, 'batch', 'tracker-additions');
+      mkdirSync(additions, { recursive: true });
+      groups.forEach((g, i) => {
+        g.num = numbers[i];
+        writeFileSync(join(additions, `${g.num}-${slugifyCompany(g.company)}.tsv`), additionTsv({ num: g.num, date: g.date, company: g.company }));
+      });
+      const merge = runScript('merge-tracker.mjs', [], root);
+      if (merge.error) throw merge.error;
+      const after = readTrackerRows(root);
+      for (const g of groups) {
+        const row = after.find((t) => t.num === g.num && normalizeCompany(t.company) === normalizeCompany(g.company));
+        if (row) {
+          result.merged++;
+          for (const id of g.threadIds) numOf.set(id, g.num);
+        } else {
+          result.mergeFailed.push(g.company);
+          for (const id of g.threadIds) failed.add(id);
+        }
+      }
+    } finally {
+      for (const chunk of numbers.chunks) await releaseFn(chunk);
+    }
+  }
+
+  for (const a of plan.trackerPlan.alreadyTracked) {
+    const status = trackerRows.find((t) => t.num === a.row)?.status || 'Applied';
+    const r = runScript('set-status.mjs', ['--row', String(a.row), status, '--note', `candiboost send ${a.date}`], root);
+    if (r.status === 0) for (const id of a.threadIds) numOf.set(id, a.row);
+    else {
+      result.noteFailed.push(a.company);
+      for (const id of a.threadIds) failed.add(id);
+    }
+  }
+
+  const records = plan.newRecords.filter((r) => !failed.has(r.thread_id));
+  await appendContacts(join(root, 'data', 'contacts.tsv'), records, numOf);
+
+  const repliesPath = join(root, 'data', 'reply-candidates.json');
+  for (const { thread_id, reply } of newReplies) {
+    if (!failed.has(thread_id)) await appendCandidate(reply, repliesPath);
+  }
+
+  await updateTable(join(root, 'data', 'candiboost.tsv'), REGISTRY_SPEC, (fresh) => {
+    const change = new Map(plan.statusChanges.map((c) => [c.thread_id, c.to]));
+    const rows = fresh.rows.map((r) => (change.has(r.thread_id) ? { ...r, status: change.get(r.thread_id) } : r));
+    for (const r of records) rows.push({ ...r, tracker: String(numOf.get(r.thread_id)) });
+    return { rows };
+  });
+  return result;
+}
+
 async function runSync(args, root) {
   const dryRun = args.includes('--dry-run');
   const threadsFile = flagValue(args, '--threads-file');
@@ -262,8 +388,12 @@ async function runSync(args, root) {
     contacts: { new: newContacts.length, noName: plan.newRecords.filter((r) => !r.contact_name).length },
     replyCandidates: { new: newReplies.length },
   };
-  if (!dryRun) fail('the real sync is not implemented yet', CLI_EXIT.USAGE);
+  if (!dryRun) {
+    const written = await writeSync({ root, plan, trackerRows, newReplies });
+    Object.assign(out, written);
+  }
   console.log(args.includes('--summary') ? renderSummary(out) : JSON.stringify(out, null, 2));
+  if (out.mergeFailed?.length || out.noteFailed?.length) process.exit(CLI_EXIT.USAGE);
 }
 
 async function main(args) {
