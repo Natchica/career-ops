@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
-import { detectLang, splitParagraphs } from './lib/letter-text.mjs';
+import { detectLang, splitParagraphs, termRe } from './lib/letter-text.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,8 +27,42 @@ export const KINDS = ['letter', 'email', 'message', 'answer', 'cv', 'text'];
 export const LANGS = ['en', 'fr'];
 export const SKILLS = ['cursor/plugins@unslop', 'theclaymethod/unslop', 'aboudjem/humanizer'];
 
-/** Detector name -> function, filled in as rules are added. */
+/** Detector name -> function(ctx, rule) returning [{term, context, hint?, hits?}]; filled in as rules are added. */
 export const UNSLOP_DETECTORS = {};
+
+/** Every regex source a rule carries: patterns per language, plus `except`. */
+function patternSources(rule) {
+  const out = [];
+  for (const list of Object.values(rule.patterns ?? {})) out.push(...list);
+  out.push(...(rule.except ?? []));
+  return out;
+}
+
+const flagsFor = (rule) => (rule.case_sensitive ? 'gmu' : 'gimu');
+
+/** The match plus up to 40 characters either side, on one line. */
+function contextAround(subject, index, length) {
+  return subject.slice(Math.max(0, index - 40), index + length + 40).replace(/\s+/g, ' ').trim();
+}
+
+/** Terms (whole-word, apostrophe-tolerant) and patterns for the text's language, over the rule's scope. */
+export function detectMatchList(ctx, rule) {
+  const terms = [...(rule.terms?.all ?? []), ...(rule.terms?.[ctx.lang] ?? [])];
+  const sources = [...(rule.patterns?.all ?? []), ...(rule.patterns?.[ctx.lang] ?? [])];
+  const regexes = [...(terms.length ? [termRe(terms)] : []), ...sources.map((source) => new RegExp(source, flagsFor(rule)))];
+  const subjects = rule.scope === 'text' ? [ctx.text] : ctx.paragraphs;
+  const hits = [];
+  for (const subject of subjects) {
+    for (const re of regexes) {
+      for (const m of subject.matchAll(re)) {
+        if (m[0] === '') continue;
+        hits.push({ term: m[0], context: contextAround(subject, m.index, m[0].length) });
+      }
+    }
+  }
+  return hits;
+}
+UNSLOP_DETECTORS['match-list'] = detectMatchList;
 
 const DEFAULT_RULES_PATH = resolve(__dirname, 'templates', 'unslop-rules.yml');
 
@@ -86,6 +120,13 @@ export function loadUnslopRules(path = DEFAULT_RULES_PATH) {
     checkSet(lang, LANGS, where, 'lang');
     if (!String(rule.must_not_flag ?? '').trim()) {
       throw new Error(`${where}: needs must_not_flag, the half that decides whether the rule is worth having`);
+    }
+    for (const source of patternSources(rule)) {
+      try {
+        new RegExp(source, flagsFor(rule));
+      } catch (err) {
+        throw new Error(`${where}: pattern does not compile: ${source} (${err.message})`);
+      }
     }
     return { ...rule, scope, kinds, lang };
   });
