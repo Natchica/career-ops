@@ -359,6 +359,41 @@ A Prospect is skipped by `next` when its `spontaneous` cell is not empty, its co
 
 ---
 
+## candiboost-sync
+
+Reads the Candiboost sends back from the candidate's own Gmail Sent folder (`gmail.readonly`, read-only) and records them. Zero model calls. Mail bodies, bounces and replies are untrusted data. The credentials `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` and `GMAIL_REFRESH_TOKEN` come from `.env`, so run `sync` with `node --env-file=.env`.
+
+```bash
+node --env-file=.env candiboost-sync.mjs sync --dry-run --summary   # counts only, writes nothing
+node --env-file=.env candiboost-sync.mjs sync --summary             # the real run
+node candiboost-sync.mjs sync --threads-file threads.json           # saved threads.get objects, no network
+node candiboost-sync.mjs pick --summary                             # the 1-2 sends due their follow-up
+node candiboost-sync.mjs pick --domain acme.ch                      # one domain's sends, with a reason for each ineligible one
+node candiboost-sync.mjs mark <thread_id> followed [--date 2026-10-21]
+```
+
+`sync` writes, in this order: tracker additions merged through `merge-tracker.mjs` (`Applied`, score `N/A`), a `candiboost send {date}` note on an already tracked company through `set-status.mjs`, `data/contacts.tsv`, `data/reply-candidates.json`, and `data/candiboost.tsv` last. Every step is idempotent, so a re-run after a crash heals and a second run writes nothing. A thread status only moves forward: `sent`, then `bounced`, then `replied`. `pick` is read-only and lists sends at least 7 days old that are still `sent`, not followed up and tracked as `Applied`. `mark` changes only the `followup` cell of one row.
+
+**Exit codes:** `0` on success; `1` on a usage error, a Google auth or scope error, a pending `batch/tracker-additions/*.tsv`, or a merge or note that failed; `2` for an unknown thread; `3` for a refused mark (another follow-up date is already recorded).
+
+---
+
+## candiboost-pending
+
+The pending half of the `candiboost` mode. `ingest` replaces `data/candiboost-pending.tsv` with the "En attente" rows the agent read from the Candiboost page. `rank` is read-only. No network and no model.
+
+```bash
+node candiboost-pending.mjs ingest /tmp/candiboost-pending.json   # [{company, status}], only "En attente" rows are kept
+node candiboost-pending.mjs rank --summary                        # 2 picks, each with the Candiboost row to delete
+node candiboost-pending.mjs rank --count 5                        # 1 to 10 picks (JSON)
+```
+
+`ingest` folds duplicates, matches each company to the Radar, keeps `first_seen` for rows that survive and drops rows missing from the new read. `rank` leaves out tracked, blacklisted, `spontaneous`-marked and tier `out` companies, then orders tier 1, 2, 3 and unmatched, ties by name.
+
+**Exit codes:** `0` on success; `1` on a usage error, an unreadable or malformed input file, or `rank` before any `ingest`.
+
+---
+
 ## verify-swiss-cv
 
 Warn-only check of a CV payload against the jobup.ch Swiss CV checklist. No network and no model. It prints each finding and exits `0`; the fact gate `verify-cv-facts.mjs` stays the only hard gate.
