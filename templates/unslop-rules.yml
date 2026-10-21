@@ -1,0 +1,160 @@
+# Career-Ops: Outbound text gate rules
+# Source of truth for scanText() in unslop.mjs.
+#
+# Every text career-ops drafts for the candidate to send passes this catalogue
+# before it is shown (modes/_writing.md, "Outbound text gate"). Rules 3 to 33 keep
+# the numbers of cursor/plugins@unslop; rules 34 and up come from
+# aboudjem/humanizer (pattern names in `source.rule`). theclaymethod/unslop
+# supplies the repair contract and the fact check, not rules.
+#
+# The file owns the rule set, the severities and the "must not flag" contract.
+# voice-dna.md section 1-2 win over every rule here: a rule that would flag what
+# voice-dna.md prescribes (parentheses, a formal register, a direct question,
+# "My CV is attached") says so in `must_not_flag`, and a test pins each case.
+#
+# Severity: `block` means unslop.mjs exits 2 and the draft is not shown as clean;
+# `warn` is listed under Open items; `none` belongs to `detect: null` rules only.
+#
+# `detect` names a detector registered in unslop.mjs, dispatched by rule. A rule
+# with `detect: null` is a reading check: scanText reports it under `skipped`,
+# never as a pass, and modes/_writing.md carries it as a checklist line.
+#
+# Patterns are single-quoted YAML (a backslash is literal; a quote is written as
+# two). Never use the word-boundary escape: under the `u` flag it treats accented
+# letters as non-word. Boundaries are lookarounds on \p{L}. A test enforces both.
+#
+# See `cannot_catch` at the bottom before trusting a clean result.
+
+rules:
+  - id: '10'
+    name: Rule of three
+    source: { skill: cursor/plugins@unslop, rule: '10' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      Three items in a row are often just three items. Telling a forced triad from
+      a real one needs meaning, not a pattern. contacto Step 4 also prescribes a
+      3-sentence frame, so the rule cannot be a scanner finding there.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: >-
+      The contacto 3-sentence frame (Fit, Proof, CTA); a list of three real
+      technologies or three real dates.
+
+  - id: '11'
+    name: Synonym cycling
+    source: { skill: cursor/plugins@unslop, rule: '11' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      Needs to know that two noun phrases name the same thing. A word list cannot.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: >-
+      Two different things with similar names (the iExec middleware and the Nox
+      protocol).
+
+  - id: '14'
+    name: Colon connector
+    source: { skill: cursor/plugins@unslop, rule: '14' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      A colon before a list or an example is fine and one before a reveal is not;
+      the difference is the sentence after it, so no pattern separates them.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: A colon before a list, an example, a time or a ratio.
+
+  - id: '16'
+    name: Inline-header list
+    source: { skill: cursor/plugins@unslop, rule: '16' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      The tell is a bold label that restates the line after it. Spotting the
+      restatement needs meaning.
+    scope: text
+    kinds: all
+    lang: all
+    must_not_flag: A label that names an item and is followed by new detail.
+
+  - id: '17'
+    name: Title-case heading
+    source: { skill: cursor/plugins@unslop, rule: '17' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      Proper nouns in a heading are capitalised legitimately; a title-case check
+      cannot tell them from decoration without a name list.
+    scope: text
+    kinds: all
+    lang: all
+    must_not_flag: A heading with product or company names capitalised.
+
+  - id: '27'
+    name: Feeling over mechanism
+    source: { skill: cursor/plugins@unslop, rule: '27' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      A sentence that names a feeling instead of a mechanism or a number is a
+      judgement about content.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: A sentence that states a number, a name or a mechanism.
+
+  - id: '28'
+    name: Dense sentence
+    source: { skill: cursor/plugins@unslop, rule: '28' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      Sentence length alone is not a finding (voice-dna.md section 1-2 prefer
+      complete sentences); whether a reader must backtrack is a reading check.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: A long sentence that carries one idea.
+
+  - id: '32'
+    name: Mannered prose
+    source: { skill: cursor/plugins@unslop, rule: '32' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      Figurative phrasing where a literal one exists is a judgement; the
+      metaphor nouns that can be listed are rule 26.
+    scope: prose
+    kinds: all
+    lang: all
+    must_not_flag: A literal technical term used literally.
+
+  - id: '33c'
+    name: "Over-compression: verbless fragment"
+    source: { skill: cursor/plugins@unslop, rule: '33' }
+    severity: none
+    detect: null
+    unimplemented_because: >-
+      A fragment without a verb cannot be told from a heading or a signature
+      line by a pattern.
+    scope: prose
+    kinds: [letter, email, answer, text]
+    lang: all
+    must_not_flag: A signature, a heading or a contact line.
+
+cannot_catch:
+  - id: meaning
+    summary: A repair can keep every number and still change a claim. The scanner checks wording and facts, not meaning; the repair contract and the reading checklist cover it.
+  - id: tone
+    summary: Whether a sentence sounds like the candidate is a reading judgement. voice-dna.md section 1-2 set the register; the scanner never scores tone.
+  - id: rhythm
+    summary: Uniform sentence length is never a finding. voice-dna.md section 1 asks for complete, plain sentences, and a formal or non-native register is an honest voice, not a tell.
+  - id: drafting-facts
+    summary: Whether a fact in the draft is true is verify-cv-facts.mjs and the Source-of-Truth boundary, not this scanner.
+  - id: other-languages
+    summary: Only English and French are scanned. Another output language gets "Outbound text gate not run" under Open items.
