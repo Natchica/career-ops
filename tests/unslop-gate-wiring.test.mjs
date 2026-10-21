@@ -43,6 +43,7 @@ const GATED = [
   ['modes/cover.md', ['letter'], false],
   ['modes/email.md', ['email'], false],
   ['modes/spontaneous.md', ['email'], true],
+  ['modes/candiboost.md', ['email'], true],
   ['modes/contacto.md', ['message'], true],
   ['modes/followup.md', ['message'], true],
   ['modes/apply.md', ['answer'], true],
