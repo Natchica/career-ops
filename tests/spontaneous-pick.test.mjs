@@ -124,6 +124,28 @@ test('untiered and stale tiers are reported, and --summary says how to repair th
   assert.match(pick(root, ['next', '--summary']).stdout, /radar-tiers\.mjs --write/);
 });
 
+test('a pick that is pending in Candiboost is flagged with the row to delete', () => {
+  const root = sandbox({ rows: FOUR });
+  writeFileSync(
+    join(root, 'data', 'candiboost-pending.tsv'),
+    'company\tradar_key\tfirst_seen\tlast_seen\nA One SA\ta1\t2026-10-20\t2026-10-21\nB One\t\t2026-10-20\t2026-10-21\n',
+  );
+  const out = JSON.parse(pick(root, ['next']).stdout);
+  const flags = Object.fromEntries(out.picks.map((p) => [p.key, [p.candiboostPending, p.candiboostRow]]));
+  assert.deepEqual(flags, { a2: [false, null], a1: [true, 'A One SA'], b1: [true, 'B One'] });
+  assert.match(
+    pick(root, ['next', '--summary']).stdout,
+    /pending in Candiboost: delete row "A One SA" after sending/,
+  );
+});
+
+test('without a Candiboost pending list no pick is flagged', () => {
+  const root = sandbox({ rows: FOUR });
+  const out = JSON.parse(pick(root, ['next']).stdout);
+  assert.ok(out.picks.every((p) => p.candiboostPending === false && p.candiboostRow === null));
+  assert.doesNotMatch(pick(root, ['next', '--summary']).stdout, /pending in Candiboost/);
+});
+
 // ---- marks ------------------------------------------------------------------
 
 const MARKABLE = [prospect({ key: 'acme', name: 'Acme', notes: 'keep' }), prospect({ key: 'beta', name: 'Beta', tier_override: '1' })];
