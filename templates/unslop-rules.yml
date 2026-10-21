@@ -105,6 +105,47 @@ rules:
       A capitalised product or company name inside a sentence (MongoDB Realm). A
       sentence-initial capital is not provably a name, so it still fires.
 
+  - id: '7b'
+    name: "AI vocabulary, tier 2 cluster"
+    source: { skill: cursor/plugins@unslop, rule: '7' }
+    severity: warn
+    detect: cluster
+    scope: prose
+    kinds: all
+    lang: [en]
+    min_hits: 2
+    skip_proper_nouns: true
+    terms:
+      en:
+        - crucial
+        - pivotal
+        - vibrant
+        - robust
+        - seamless
+        - seamlessly
+        - foster
+        - fosters
+        - fostering
+        - enhance
+        - enhances
+        - enhanced
+        - enhancing
+        - showcase
+        - showcases
+        - showcasing
+        - notably
+        - garner
+        - garners
+        - bolster
+        - bolsters
+        - utilize
+        - utilizes
+        - utilise
+    must_not_flag: >-
+      One such word on its own, the same words spread over different paragraphs,
+      and a capitalised company name (Robust Inc.). Per humanizer, a lone tier 2
+      word is not evidence; a cluster is.
+
   - id: '8'
     name: Fancy copula
     source: { skill: cursor/plugins@unslop, rule: '8' }
@@ -371,6 +412,43 @@ rules:
         - quelle excellente idée
     must_not_flag: The word question on its own (a question about the stack).
 
+  - id: '23'
+    name: Filler phrase
+    source: { skill: cursor/plugins@unslop, rule: '23' }
+    severity: warn
+    detect: phrase-map
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    map:
+      en:
+        in order to: to
+        due to the fact that: because
+        owing to the fact that: because
+        it is important to note that: ""
+        "it's important to note that": ""
+        it is worth noting that: ""
+        "it's worth noting that": ""
+        at this point in time: now
+        for the purpose of: to
+        in spite of the fact that: although
+        has the ability to: can
+        with regard to: about
+      fr:
+        il est important de noter que: ""
+        il convient de noter que: ""
+        il convient de souligner que: ""
+        il va sans dire que: ""
+        force est de constater que: ""
+        du fait que: parce que
+        en raison du fait que: parce que
+        dans le but de: pour
+        "à l'heure actuelle": aujourd'hui
+        "au jour d'aujourd'hui": aujourd'hui
+    must_not_flag: >-
+      The French connectors voice-dna.md section 1 prescribes (afin de, parce que,
+      dans le cadre de, au sein de).
+
   - id: '24'
     name: Stacked hedges
     source: { skill: cursor/plugins@unslop, rule: '24' }
@@ -467,6 +545,43 @@ rules:
     kinds: all
     lang: all
     must_not_flag: A long sentence that carries one idea.
+
+  - id: '31'
+    name: Plain-word map
+    source: { skill: cursor/plugins@unslop, rule: '31' }
+    severity: warn
+    detect: phrase-map
+    scope: prose
+    kinds: all
+    lang: [en]
+    skip_proper_nouns: true
+    map:
+      en:
+        utilize: use
+        utilise: use
+        utilizes: uses
+        utilizing: using
+        utilization: use
+        leverage: use
+        leverages: uses
+        leveraging: using
+        leveraged: used
+        facilitate: help
+        facilitates: helps
+        facilitated: helped
+        numerous: many
+        in the event that: if
+        commence: start
+        commenced: started
+        prior to: before
+        subsequent to: after
+        endeavour: try
+        endeavor: try
+        ascertain: find out
+    except:
+      - 'leverage\s+ratio'
+      - 'financial\s+leverage'
+    must_not_flag: A financial leverage ratio, and a capitalised company name (Leverage Labs).
 
   - id: '32'
     name: Mannered prose
