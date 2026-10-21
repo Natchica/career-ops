@@ -274,6 +274,142 @@ export function scanText(text, { kind = 'text', lang, rules } = {}) {
   return { findings, skipped, cannotCatch };
 }
 
+// ---- Fact diff: did a repair keep every number, date, URL, email and name? ----
+
+const EN_NUMBER_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
+// "sept" is left out (it is also a month abbreviation); "un" and "une" are articles, not numbers.
+const FR_NUMBER_WORDS = { deux: 2, trois: 3, quatre: 4, cinq: 5, six: 6, huit: 8, neuf: 9, dix: 10, onze: 11, douze: 12 };
+const NUMBER_WORD_RE = new RegExp(`(?<!\\p{L})(?:${[...Object.keys(EN_NUMBER_WORDS), ...Object.keys(FR_NUMBER_WORDS)].join('|')})(?!\\p{L})`, 'giu');
+
+/** Curly apostrophes straightened and number words written as digits, in both texts before extraction. */
+function normalizeForFacts(text) {
+  return String(text ?? '')
+    .replace(/[‘’]/g, "'")
+    .replace(NUMBER_WORD_RE, (w) => String(EN_NUMBER_WORDS[w.toLowerCase()] ?? FR_NUMBER_WORDS[w.toLowerCase()]));
+}
+
+const MONTH = '(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec|janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre)';
+const NUM_BODY = String.raw`\d(?:[\d']|[.,](?=\d)|\s(?=\d{3}(?!\d)))*`;
+const CURRENCY_CODE = { chf: 'CHF', eur: 'EUR', usd: 'USD', gbp: 'GBP', 'fr.': 'CHF', '€': 'EUR', $: 'USD', '£': 'GBP' };
+
+/** A number without thousands separators; a comma that is not a thousands mark becomes a point. */
+const cleanNumber = (s) => s.replace(/(?<=\d)[,'    ](?=\d{3}(?!\d))/g, '').replace(/,/g, '.');
+const cleanUnit = (s) => s.toLowerCase().replace(/\s+/g, '').replace('µ', 'μ');
+
+/**
+ * Fact classes, run in this order; each match is masked with spaces so a later class cannot re-match
+ * inside it. `norm` returns the comparable value (and may choose the class: count or number).
+ */
+const FACT_CLASSES = [
+  { res: [new RegExp(String.raw`(?<![\p{L}\p{N}])https?:\/\/[^\s<>()"'\]]*[^\s<>()"'\].,;:!?]`, 'giu')],
+    norm: (m) => { const p = /^(https?:\/\/)([^/]+)(.*)$/i.exec(m); return { cls: 'url', value: p ? p[1].toLowerCase() + p[2].toLowerCase() + p[3] : m }; } },
+  { res: [new RegExp(String.raw`(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+`, 'giu')],
+    norm: (m) => ({ cls: 'email', value: m.toLowerCase() }) },
+  { res: [new RegExp(String.raw`(?<![\p{L}\p{N}@./-])(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|ch|fr|de|io|org|net|dev|eu|li|ai|co|uk|at|it)(?:\/[^\s<>()"',;]*[^\s<>()"',;.!?:])?(?![\p{L}\p{N}])`, 'giu')],
+    norm: (m) => ({ cls: 'url', value: m.toLowerCase() }) },
+  { res: [
+      new RegExp(String.raw`(?:(?:CHF|EUR|USD|GBP|Fr\.)\s?|[€$£])${NUM_BODY}(?:\s?[kKmM])?(?![\p{L}\p{N}])`, 'giu'),
+      new RegExp(String.raw`(?<![\p{L}\p{N}.,'])${NUM_BODY}\s?(?:CHF|EUR|USD|GBP|€|\$|£)(?![\p{L}\p{N}])`, 'giu'),
+    ],
+    norm: (m) => {
+      const code = /(CHF|EUR|USD|GBP|Fr\.|€|\$|£)/i.exec(m)[1];
+      const body = m.replace(/(CHF|EUR|USD|GBP|Fr\.|€|\$|£)/i, '').trim();
+      return { cls: 'currency', value: `${CURRENCY_CODE[code.toLowerCase()] ?? code.toUpperCase()}${cleanNumber(body.replace(/\s?[kKmM]$/, (x) => x.trim().toLowerCase()))}` };
+    } },
+  { res: [new RegExp(String.raw`\d+(?:[.,]\d+)?\s?%`, 'gu')],
+    norm: (m) => ({ cls: 'percent', value: m.replace(/\s/g, '').replace(',', '.') }) },
+  { res: [
+      new RegExp(String.raw`(?<![\p{L}\p{N}])\d{4}-\d{2}-\d{2}(?![\p{L}\p{N}])`, 'gu'),
+      new RegExp(String.raw`(?<![\p{L}\p{N}])\d{1,2}(?:st|nd|rd|th|er)?\s+${MONTH}(?!\p{L})(?:\s+\d{4})?(?![\p{L}\p{N}])`, 'giu'),
+      new RegExp(String.raw`(?<!\p{L})${MONTH}\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?(?![\p{L}\p{N}])`, 'giu'),
+      new RegExp(String.raw`(?<!\p{L})${MONTH}\s+\d{4}(?![\p{L}\p{N}])`, 'giu'),
+      new RegExp(String.raw`(?<!\p{N})\d{1,2}[./]\d{1,2}[./]\d{2,4}(?!\p{N})`, 'gu'),
+    ],
+    norm: (m) => ({ cls: 'date', value: m.toLowerCase().replace(/(?<=\d)(?:st|nd|rd|th|er)(?!\p{L})/gu, '').replace(/,/g, '').replace(/\s+/g, ' ').trim() }) },
+  { res: [
+      new RegExp(String.raw`(?<![\p{N}:])\d{1,2}(?::|h)\d{2}(?:\s?[ap]\.?m\.?)?(?:\s?(?:CET|CEST|UTC|GMT|BST|EST|PST)(?:[+-]\d{1,2})?)?(?!\p{N})`, 'giu'),
+      new RegExp(String.raw`(?<!\p{N})\d{1,2}\s?[ap]\.?m\.?(?!\p{L})`, 'giu'),
+    ],
+    norm: (m) => ({ cls: 'time', value: m.toLowerCase().replace(/\s+/g, '') }) },
+  { res: [
+      new RegExp(String.raw`(?<![\p{N}.,])\d+(?:[.,]\d+)?\s?[-–—]\s?\d+(?:[.,]\d+)?(?!\p{N})`, 'gu'),
+      new RegExp(String.raw`(?<!\p{N})\d+\s+(?:to|à|bis)\s+\d+(?!\p{N})`, 'giu'),
+    ],
+    norm: (m) => ({ cls: 'range', value: m.toLowerCase().replace(/\s?[–—]\s?|\s?-\s?|\s+(?:to|à|bis)\s+/g, '-').replace(/,/g, '.') }) },
+  { res: [new RegExp(String.raw`(?<![\p{L}\p{N}.,'])\d+(?:(?:[.,']|[    ](?=\d{3}(?!\d)))\d+)*(?:\s?(?:ms|µs|μs|sec|min|hrs?|hours?|days?|weeks?|months?|years?|yrs?|jours?|semaines?|mois|ans?|années?|GB|MB|TB|KB|GiB|MiB|rps|qps|s|h|k|K|M|x|×))?(?![\p{L}\p{N}])`, 'gu')],
+    norm: (m) => {
+      const unit = /^[\d.,'    ]+?\s?([\p{L}×µ]+)$/u.exec(m)?.[1];
+      const digits = unit ? m.slice(0, m.length - unit.length).trim() : m;
+      return unit ? { cls: 'count', value: `${cleanNumber(digits)}${cleanUnit(unit)}` } : { cls: 'number', value: cleanNumber(digits) };
+    } },
+];
+
+const STOP_CAPS = new Set(['I', 'A', 'An', 'The', 'My', 'Your', 'Our', 'Their', 'His', 'Her', 'Its', 'We', 'You', 'They', 'He', 'She', 'It', 'This', 'That', 'These', 'Those', 'Since', 'In', 'On', 'At', 'For', 'From', 'With', 'As', 'If', 'When', 'While', 'After', 'Before', 'Also', 'And', 'But', 'So', 'Or', 'Dear', 'Kind', 'Best', 'Regards', 'Hello', 'Hi', 'Please', 'Thank', 'Thanks', 'Could', 'Would', 'Can', 'Will', 'Should', 'Which', 'What', 'Who', 'Where', 'How', 'Why', 'There', 'Here', 'Each', 'Every', 'All', 'Both', 'Yes', 'No', 'Not', 'Je', 'J', 'Le', 'La', 'Les', 'L', 'Un', 'Une', 'Des', 'De', 'Du', 'Mon', 'Ma', 'Mes', 'Votre', 'Vos', 'Notre', 'Nos', 'Nous', 'Vous', 'Il', 'Elle', 'Ils', 'Elles', 'Ce', 'Cette', 'Ces', 'Depuis', 'Dans', 'En', 'Pour', 'Avec', 'Sur', 'Par', 'Et', 'Mais', 'Ou', 'Donc', 'Madame', 'Monsieur', 'Bonjour', 'Cordialement', 'Veuillez', 'Merci']);
+const NAME_RE = /(?<![\p{L}\p{N}])(?:\p{Lu}[\p{L}\p{N}+#.'-]*[\p{L}\p{N}+#]|\p{Lu}|\p{Ll}+\p{Lu}[\p{L}\p{N}]*|\p{L}+\p{N}[\p{L}\p{N}]*)(?![\p{L}\p{N}])/gu;
+const INTERNAL = /\p{Ll}\p{Lu}|\p{L}\p{N}/u;
+const SENTENCE_START = /(?:^[ \t]*|\n[ \t]*|[.!?:]\s+)$/;
+
+/** Facts per class from a text, plus the text with every fact blanked out (for name counting). */
+function extractFacts(text) {
+  let masked = normalizeForFacts(text);
+  const facts = [];
+  for (const spec of FACT_CLASSES) {
+    for (const re of spec.res) {
+      masked = masked.replace(re, (m) => {
+        facts.push(spec.norm(m));
+        return ' '.repeat(m.length);
+      });
+    }
+  }
+  return { facts, masked };
+}
+
+/** Distinct names in a masked text: capitalised words inside a sentence, plus camelCase and letter+digit words. */
+function namesOf(masked) {
+  const names = new Set();
+  for (const m of masked.matchAll(NAME_RE)) {
+    if (INTERNAL.test(m[0])) { names.add(m[0]); continue; }
+    if (STOP_CAPS.has(m[0]) || SENTENCE_START.test(masked.slice(0, m.index))) continue;
+    names.add(m[0]);
+  }
+  return names;
+}
+
+const countWord = (masked, word) => [...masked.matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'gu'))].length;
+
+/**
+ * Compare the facts of a text before and after a repair. A fact present only in `after` is not a finding.
+ * @returns {{ok: boolean, kept: number, missing: {cls: string, value: string}[], altered: {cls: string, from: string, to: string}[]}}
+ */
+export function diffFacts(before, after) {
+  const b = extractFacts(before);
+  const a = extractFacts(after);
+  const byClass = (facts) => facts.reduce((acc, f) => { (acc[f.cls] ??= []).push(f.value); return acc; }, {});
+  const beforeBy = byClass(b.facts);
+  const afterBy = byClass(a.facts);
+  const missing = [];
+  const altered = [];
+  let kept = 0;
+
+  for (const [cls, values] of Object.entries(beforeBy)) {
+    const rest = [...(afterBy[cls] ?? [])];
+    const left = [];
+    for (const v of values) {
+      const i = rest.indexOf(v);
+      if (i >= 0) { rest.splice(i, 1); kept += 1; } else left.push(v);
+    }
+    left.forEach((v, i) => (i < rest.length ? altered.push({ cls, from: v, to: rest[i] }) : missing.push({ cls, value: v })));
+  }
+
+  for (const name of namesOf(b.masked)) {
+    const was = countWord(b.masked, name);
+    const now = countWord(a.masked, name);
+    if (now < was) missing.push({ cls: 'name', value: name });
+    else kept += 1;
+  }
+  return { ok: missing.length === 0 && altered.length === 0, kept, missing, altered };
+}
+
 const USAGE = `Usage: node unslop.mjs <file> [--kind letter|email|message|answer|cv|text] [--lang en|fr]
        node unslop.mjs --diff <before> <after>
 
@@ -308,7 +444,29 @@ export function runCli(args) {
     if (!args[i].startsWith('-')) positionals.push(args[i]);
   }
 
-  if (args.includes('--diff')) fail('--diff is not available yet');
+  if (args.includes('--diff')) {
+    if (args.includes('--kind') || args.includes('--lang')) fail('--diff takes no --kind or --lang');
+    if (positionals.length !== 2) fail('--diff takes two files: node unslop.mjs --diff <before> <after>');
+    for (const path of positionals) if (!existsSync(path)) fail(`file not found: ${path}`);
+    let before;
+    let after;
+    try {
+      before = readFileSync(positionals[0], 'utf-8');
+      after = readFileSync(positionals[1], 'utf-8');
+    } catch (e) {
+      fail(`cannot read the files: ${e.message}`);
+    }
+    const result = diffFacts(before, after);
+    if (result.ok) {
+      console.log(`Fact check passed: ${result.kept} facts kept.`);
+      return;
+    }
+    console.log(`Fact check failed: ${result.missing.length} missing, ${result.altered.length} altered`);
+    for (const f of result.missing) console.log(`  ✖ missing ${f.cls}: ${f.value}`);
+    for (const f of result.altered) console.log(`  ✖ altered ${f.cls}: ${f.from} → ${f.to}`);
+    process.exitCode = 2;
+    return;
+  }
 
   const [input] = positionals;
   if (!input) fail('give the text file: node unslop.mjs <file> [--kind letter|email|message|answer|cv|text] [--lang en|fr]');
