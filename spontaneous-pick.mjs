@@ -24,6 +24,7 @@ import { CLI_EXIT, normalizeCompany } from './tracker-utils.mjs';
 import { parseContacts } from './contacts.mjs';
 import { findContactsByCompany } from './contact-lookup.mjs';
 import { baseKey } from './radar/identity.mjs';
+import { PENDING_COLUMNS, readTable } from './lib/candiboost.mjs';
 import { RADAR_COLUMNS, readRegistry, registryPath, updateRegistry } from './radar/registry.mjs';
 import { RadarConfigError } from './radar/zones.mjs';
 import {
@@ -92,7 +93,7 @@ export function trackerCompanyMatches(row, company) {
  * @returns {{picks: object[], excluded: {marked: number, tracked: number, blacklisted: number},
  *            eligible: number, untiered: number, staleTiers: number}}
  */
-export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, count = 3 }) {
+export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, candiboostRowFor = () => null, count = 3 }) {
   const excluded = { marked: 0, tracked: 0, blacklisted: 0 };
   let untiered = 0;
   let staleTiers = 0;
@@ -119,6 +120,8 @@ export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, c
     size_band: row.size_band || '?',
     portals_ref: row.portals_ref && row.portals_ref !== '—' ? row.portals_ref : null,
     savedContacts: contactsFor(row),
+    candiboostPending: candiboostRowFor(row) !== null,
+    candiboostRow: candiboostRowFor(row),
   }));
   return { picks, excluded, eligible: eligible.length, untiered, staleTiers };
 }
@@ -169,6 +172,7 @@ function renderNext(out) {
     const contacts = p.savedContacts ? ` · ${p.savedContacts} saved contact(s)` : '';
     lines.push(`  ${p.rank}. ${p.name} (${p.key}) — tier ${p.tier} · ${p.sites.join(', ')} · ${p.country} · ${p.signals} signal(s) · size ${p.size_band}${board}${contacts}`);
     lines.push(`     ${p.tier_reason}`);
+    if (p.candiboostPending) lines.push(`     pending in Candiboost: delete row "${p.candiboostRow}" after sending`);
   }
   if (out.picks.length === 0) lines.push('  nothing eligible: run node radar-tiers.mjs --write, or loosen config/radar-tiers.yml');
   if (out.untiered || out.staleTiers) {
@@ -205,7 +209,14 @@ function runNext(args, root) {
   const contacts = existsSync(contactsPath) ? parseContacts(readFileSync(contactsPath, 'utf-8')).contacts : [];
   const contactsFor = (row) => prospectNames(row).reduce((n, name) => n + findContactsByCompany(contacts, name).length, 0);
 
-  const out = pickNext(registry.rows, rules, { isTracked, isBlacklisted, contactsFor, count });
+  const pending = readTable(join(root, 'data', 'candiboost-pending.tsv'), { key: 'company', columns: PENDING_COLUMNS }).rows;
+  const pendingByKey = new Map(pending.filter((p) => p.radar_key).map((p) => [p.radar_key, p.company]));
+  const pendingByBase = new Map(pending.map((p) => [baseKey(p.company), p.company]).filter(([b]) => b));
+  const candiboostRowFor = (row) => pendingByKey.get(row['key'])
+    ?? pendingByBase.get(baseKey(row.name))
+    ?? null;
+
+  const out = pickNext(registry.rows, rules, { isTracked, isBlacklisted, contactsFor, candiboostRowFor, count });
   console.log(args.includes('--summary') ? renderNext(out) : JSON.stringify(out, null, 2));
 }
 
