@@ -6,9 +6,10 @@
  *
  *   node verify-letter.mjs <body.txt | payload.json> [--kind letter|email] [--lang en|fr] [--company <name>]
  *
- * It reports findings and exits 0, whether or not it found any: the fact gate
- * (verify-cv-facts.mjs) stays the only hard gate. Exit 1 means a usage error or
- * unreadable input.
+ * It also runs the unslop.mjs scan and merges the findings by cause. Exit 0: no block
+ * finding (warnings may exist). Exit 2: a block finding (a banned word, a contraction,
+ * an em dash, an exclamation mark, or a block slop rule). Exit 1: a usage error or
+ * unreadable input. The fact gate (verify-cv-facts.mjs) stays the only fact check.
  */
 
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -16,7 +17,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
-import { detectLang, isGermanSentence, splitParagraphs, termRe, wordCount } from './lib/letter-text.mjs';
+import { scanText } from './unslop.mjs';
+import { detectLang, isGermanSentence, normTerm, splitParagraphs, termRe, wordCount } from './lib/letter-text.mjs';
 
 export { detectLang, isGermanSentence };
 
@@ -78,6 +80,9 @@ function namesCompany(paragraph, company, postingRe) {
   if (!name) return true;
   return termRe([name]).test(paragraph);
 }
+
+// Findings the voice-dna.md section 2 and 3 rules make hard: a banned word, a contraction, an em dash, an exclamation mark.
+const SEVERITY = { 'banned-word': 'block', contraction: 'block', 'em-dash': 'block', exclamation: 'block' };
 
 const MARKER = /\[confirm[^\]]*\]/gi;
 const EM_DASH = /\u2014|\s\u2013\s/g;
@@ -164,7 +169,7 @@ export function splitBody(text) {
 export function checkLetter(text, { kind = 'email', lang, company, bannedLists = BUILTIN_BANNED } = {}) {
   const rules = RULES[lang ?? detectLang(text)] ?? EN;
   const findings = [];
-  const add = (code, message) => findings.push({ code, message });
+  const add = (code, message, terms) => findings.push({ code, severity: SEVERITY[code] ?? 'warn', message, ...(terms ? { terms } : {}) });
 
   const whole = String(text ?? '');
   const { paragraphs } = splitBody(text);
@@ -191,7 +196,7 @@ export function checkLetter(text, { kind = 'email', lang, company, bannedLists =
 
   const stock = unique(STOCK_RE, sentences);
   if (stock.length) {
-    add('stock-phrase', `Stock phrases (${stock.join(', ')}); replace each with a concrete example.`);
+    add('stock-phrase', `Stock phrases (${stock.join(', ')}); replace each with a concrete example.`, stock.map(normTerm));
   }
 
   const stockFolded = new Set(STOCK.map((t) => t.toLowerCase()));
@@ -199,12 +204,12 @@ export function checkLetter(text, { kind = 'email', lang, company, bannedLists =
     .filter((t) => t && !stockFolded.has(t.toLowerCase())))];
   const bannedFound = banned.length ? unique(termRe(banned), sentences) : [];
   if (bannedFound.length) {
-    add('banned-word', `Banned wording from voice-dna.md (${bannedFound.join(', ')}); use a plain word.`);
+    add('banned-word', `Banned wording from voice-dna.md (${bannedFound.join(', ')}); use a plain word.`, bannedFound.map(normTerm));
   }
 
   const fillers = paragraphs.map((p) => p[0]).filter((first) => rules.filler.test(first));
   if (fillers.length) {
-    add('filler-opener', `A paragraph opens with filler ("${fillers[0].split(/\s+/).slice(0, 4).join(' ')}"); open with the company, the system or the number.`);
+    add('filler-opener', `A paragraph opens with filler ("${fillers[0].split(/\s+/).slice(0, 4).join(' ')}"); open with the company, the system or the number.`, fillers.map((first) => normTerm(rules.filler.exec(first)?.[0] ?? '')).filter(Boolean));
   }
 
   // Paragraph roles: 4 paragraphs put the objective in the 3rd; 3 or 5+ search the
@@ -238,16 +243,64 @@ export function checkLetter(text, { kind = 'email', lang, company, bannedLists =
   if (markers.length) {
     add('unconfirmed-marker', `Unresolved marker ${markers[0]}; confirm it or remove it before sending.`);
   }
-  if (EM_DASH.test(whole)) add('em-dash', 'An em dash; use a comma, a colon, a semicolon or parentheses.');
+  const dashes = [...whole.matchAll(EM_DASH)].map((m) => normTerm(m[0].trim()));
+  if (dashes.length) add('em-dash', 'An em dash; use a comma, a colon, a semicolon or parentheses.', [...new Set(dashes)]);
   if (whole.includes('!')) add('exclamation', 'An exclamation mark; state it plainly.');
   return findings;
 }
 
+const coveredBy = (term, covered) => {
+  const t = normTerm(term);
+  return covered.find((c) => c.term === t || (c.term.length >= 4 && t.length >= 4 && (t.includes(c.term) || c.term.includes(t))));
+};
+
+/**
+ * Merge the letter-contract findings with the unslop scan, one finding per cause. A slop match whose
+ * term a letter finding already carries (an em dash, a banned word, a stock phrase, a filler opener)
+ * is dropped, and the letter finding takes the higher of the two severities. A cluster loses the hits
+ * a letter finding covers and is dropped below two hits.
+ */
+function mergeByCause(letter, slop) {
+  const covered = letter.flatMap((f) => (f.terms ?? []).map((term) => ({ term, finding: f })));
+  const raise = (finding, severity) => { if (severity === 'block') finding.severity = 'block'; };
+  const merged = [];
+  for (const s of slop) {
+    if (s.id === 'empty-text' && letter.some((f) => f.code === 'empty-body')) continue;
+    if (s.hits) {
+      const kept = s.hits.filter((hit) => {
+        const c = coveredBy(hit, covered);
+        if (c) raise(c.finding, s.severity);
+        return !c;
+      });
+      if (kept.length < 2) continue;
+      merged.push({ code: `unslop-${s.id}`, severity: s.severity, message: `${s.name}: "${kept.join(', ')}"` });
+      continue;
+    }
+    const c = coveredBy(s.term, covered);
+    if (c) { raise(c.finding, s.severity); continue; }
+    merged.push({ code: `unslop-${s.id}`, severity: s.severity, message: `${s.name}: "${s.term}"${s.hint ? ` (${s.hint})` : ''}` });
+  }
+  return [...letter, ...merged];
+}
+
+/**
+ * The letter contract (checkLetter) plus the unslop scan, merged by cause. Block findings make the CLI exit 2.
+ * @param {string} text
+ * @param {{kind?: 'letter'|'email', lang?: 'en'|'fr', company?: string, bannedLists?: object, rules?: object[]}} [opts]
+ * @returns {{code: string, severity: 'block'|'warn', message: string}[]}
+ */
+export function verifyLetter(text, { kind = 'email', lang, company, bannedLists, rules } = {}) {
+  const resolved = lang ?? detectLang(text);
+  const letter = checkLetter(text, { kind, lang: resolved, company, ...(bannedLists ? { bannedLists } : {}) });
+  const { findings: slop } = scanText(text, { kind, lang: resolved, rules });
+  return mergeByCause(letter, slop);
+}
+
 const USAGE = `Usage: node verify-letter.mjs <body.txt | payload.json> [--kind letter|email] [--lang en|fr] [--company <name>]
 
-Warn-only check of a cover letter or application email against the voice-dna.md
-section 1 letter contract. Prints each finding and exits 0; exits 1 only on a
-usage error or unreadable input.
+Check of a cover letter or application email against the voice-dna.md section 1
+letter contract, plus the unslop.mjs scan. Prints each finding. Exit 0: no block
+finding. Exit 2: a block finding. Exit 1: a usage error or unreadable input.
 
 Options:
   --kind <letter|email>  Word budget and defaults (letter 250-350 words, email 150-250)
@@ -316,13 +369,16 @@ export function runCli(args) {
   const { lists, note } = loadBannedLists();
   if (note) console.error(note);
 
-  const findings = checkLetter(text, { kind, lang, company, bannedLists: lists });
+  const findings = verifyLetter(text, { kind, lang, company, bannedLists: lists });
   if (findings.length === 0) {
     console.log('Letter check passed: no findings.');
     return;
   }
-  console.log(`Letter check: ${findings.length} finding${findings.length === 1 ? '' : 's'} (warn-only)`);
-  for (const f of findings) console.log(`  ⚠ ${f.code}: ${f.message}`);
+  const blocks = findings.filter((f) => f.severity === 'block').length;
+  const count = `${findings.length} finding${findings.length === 1 ? '' : 's'}`;
+  console.log(blocks > 0 ? `Letter check: ${count}, ${blocks} block` : `Letter check: ${count} (warn-only)`);
+  for (const f of findings) console.log(`  ${f.severity === 'block' ? '\u2716' : '\u26A0'} ${f.code}: ${f.message}`);
+  if (blocks > 0) process.exitCode = 2;
 }
 
 if (isMainModule(import.meta.url)) runCli(process.argv.slice(2));
