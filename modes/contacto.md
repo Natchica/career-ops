@@ -142,6 +142,9 @@ short message; otherwise run the LinkedIn power move below.
    - EN (default)
    - ES (if Spanish company)
 
+   Read `modes/_writing.md` → Outbound text gate; this mode does not load it otherwise.
+   Run the Outbound text gate (`modes/_writing.md`), kind `message`, on each version before you show it. A version in a language the scanner does not read (ES) gets "Outbound text gate not run: es" under Open items. Count the characters again after the gate; a message still over its budget is shown with the overshoot under Open items.
+
 6. **Alternative targets**, if the search happened to confirm any others: one line
    each (who they are, and the single reason to try them). Omit this section
    entirely when there is only one target -- it is a note on what you already
@@ -233,7 +236,7 @@ that there is **no contact discovery**.
    "I hope to have the opportunity", generic self-description. Every clause must
    earn its characters.
 
-6. **Output:** the greeting, its character count vs the budget, and a one-line note
+6. **Output:** first run the Outbound text gate (`modes/_writing.md`), kind `message`, on the greeting (a Chinese or other non-en/fr greeting gets "Outbound text gate not run"); then give the greeting, its character count vs the budget, and a one-line note
    of which match point(s) it used. Offer a shorter fallback if it's near the limit.
 
 **Greeting rules:**
