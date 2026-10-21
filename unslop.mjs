@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
-import { detectLang, normTerm, splitParagraphs, termRe } from './lib/letter-text.mjs';
+import { detectLang, isWord, normTerm, splitParagraphs, termRe } from './lib/letter-text.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -115,6 +115,43 @@ export function detectPhraseMap(ctx, rule) {
   return hits;
 }
 UNSLOP_DETECTORS['phrase-map'] = detectPhraseMap;
+
+const escapeLiteral = (word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Agentless passive: an auxiliary plus a regular (-ed, -en) or listed irregular participle, in a sentence
+ * with no "by" actor. Adjectival participles (attached, based) and -en words that are not participles
+ * (open, citizen) are listed in the rule data; this is a heuristic and the rule is warn only.
+ */
+export function detectPassive(ctx, rule) {
+  const aux = (rule.auxiliaries ?? []).map(escapeLiteral).join('|');
+  const irregular = (rule.irregular ?? []).map(escapeLiteral).join('|');
+  const re = new RegExp(`(?<!\\p{L})(?:${aux})\\s+(?:(?:not|also|already|then|now|fully|still|being)\\s+)?(\\p{L}{3,}(?:ed|en)${irregular ? `|${irregular}` : ''})(?!\\p{L})`, 'giu');
+  const skip = new Set([...(rule.allow ?? []), ...(rule.not_participles ?? [])].map((w) => w.toLowerCase()));
+  const hits = [];
+  for (const paragraph of ctx.paragraphs) {
+    for (const sentence of paragraph.split(/(?<=[.!?])\s+/)) {
+      for (const m of sentence.matchAll(re)) {
+        if (skip.has(m[1].toLowerCase())) continue;
+        if (/(?<!\p{L})by(?!\p{L})/iu.test(sentence.slice(m.index + m[0].length))) continue;
+        hits.push({ term: m[0], context: sentence.slice(0, 120) });
+      }
+    }
+  }
+  return hits;
+}
+UNSLOP_DETECTORS.passive = detectPassive;
+
+/** More than `threshold_per_100` adverbs per 100 words, with at least `min_hits`, over the whole prose. */
+export function detectAdverbDensity(ctx, rule) {
+  const prose = ctx.paragraphs.join(' ');
+  const words = prose.split(/\s+/).filter(isWord).length;
+  const skip = new Set((rule.not_adverbs ?? []).map((w) => w.toLowerCase()));
+  const hits = (prose.match(/(?<!\p{L})\p{L}{2,}ly(?!\p{L})/giu) ?? []).filter((w) => !skip.has(w.toLowerCase()));
+  if (words === 0 || hits.length < (rule.min_hits ?? 2) || (hits.length * 100) / words <= (rule.threshold_per_100 ?? 3)) return [];
+  return [{ term: `${hits.length} adverbs in ${words} words`, context: hits.join(', '), hits }];
+}
+UNSLOP_DETECTORS['adverb-density'] = detectAdverbDensity;
 
 const DEFAULT_RULES_PATH = resolve(__dirname, 'templates', 'unslop-rules.yml');
 
