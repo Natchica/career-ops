@@ -26,6 +26,88 @@
 # See `cannot_catch` at the bottom before trusting a clean result.
 
 rules:
+  - id: '5'
+    name: Vague attribution
+    source: { skill: cursor/plugins@unslop, rule: '5' }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    terms:
+      en:
+        - experts believe
+        - experts say
+        - experts agree
+        - studies show
+        - studies suggest
+        - research shows
+        - research suggests
+        - industry reports suggest
+        - some critics argue
+        - critics argue
+        - it is widely believed
+        - it is widely accepted
+        - many believe
+        - observers note
+      fr:
+        - selon les experts
+        - les experts estiment
+        - des études montrent
+        - des études suggèrent
+        - de nombreuses études
+        - certains estiment
+        - il est largement admis
+    must_not_flag: A named source (a report, a paper, a person) stated with its name.
+
+  - id: '7'
+    name: "AI vocabulary, tier 1A"
+    source: { skill: cursor/plugins@unslop, rule: '7' }
+    severity: block
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    skip_proper_nouns: true
+    terms:
+      en:
+        - delve
+        - delves
+        - delved
+        - delving
+        - tapestry
+        - tapestries
+        - testament
+        - multifaceted
+        - realm
+        - realms
+        - interplay
+    must_not_flag: >-
+      A capitalised product or company name inside a sentence (MongoDB Realm). A
+      sentence-initial capital is not provably a name, so it still fires.
+
+  - id: '8'
+    name: Fancy copula
+    source: { skill: cursor/plugins@unslop, rule: '8' }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    terms:
+      en:
+        - serves as
+        - serve as
+        - served as
+        - stands as
+        - stand as
+        - boasts
+        - boasting
+        - marks a
+        - represents a
+        - holds the distinction of
+    must_not_flag: Plain is and has; the noun features (the new features shipped).
+
   - id: '10'
     name: Rule of three
     source: { skill: cursor/plugins@unslop, rule: '10' }
@@ -167,6 +249,128 @@ rules:
       Straight quotes; French elision between letters (l'equipe typed with a curly
       apostrophe); French guillemets.
 
+  - id: '20'
+    name: Chatbot phrase
+    source: { skill: cursor/plugins@unslop, rule: '20' }
+    severity: block
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    terms:
+      en:
+        - I hope this helps
+        - I hope this message finds you well
+        - I hope this email finds you well
+        - I hope you are doing well
+        - "I hope you're doing well"
+        - let me know if
+        - feel free to
+        - happy to help
+        - glad to help
+        - "I'd be happy to help"
+        - as an AI
+        - as a language model
+        - would you like me to
+      fr:
+        - "j'espère que cela vous aide"
+        - "j'espère que cela vous aidera"
+        - "j'espère que ce message vous trouve en bonne santé"
+        - "j'espère que vous allez bien"
+        - "en tant qu'IA"
+        - en tant que modèle de langage
+        - voulez-vous que je
+    patterns:
+      en:
+        - '(?:^|(?<=[.!?]\s{1,3}))(?:Certainly|Of\s+course|Absolutely|Sure)(?=\s*[!,.])'
+      fr:
+        - '(?:^|(?<=[.!?]\s{1,3}))(?:Bien\s+sûr|Certainement|Absolument|Avec\s+plaisir)(?=\s*[!,.])'
+    must_not_flag: >-
+      A question put to the reader (Could you tell me which stack the team uses?),
+      certainly or sure inside a sentence, and the ordinary French closings (Je
+      reste a votre disposition; N'hesitez pas a me contacter).
+
+  - id: '22'
+    name: Sycophantic tone
+    source: { skill: cursor/plugins@unslop, rule: '22' }
+    severity: block
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    terms:
+      en:
+        - great question
+        - excellent question
+        - "you're absolutely right"
+        - you are absolutely right
+        - what a great
+        - brilliant idea
+      fr:
+        - excellente question
+        - très bonne question
+        - vous avez tout à fait raison
+        - vous avez entièrement raison
+        - quelle excellente idée
+    must_not_flag: The word question on its own (a question about the stack).
+
+  - id: '25'
+    name: Generic conclusion
+    source: { skill: cursor/plugins@unslop, rule: '25' }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    terms:
+      en:
+        - the future looks bright
+        - the future is bright
+        - exciting times ahead
+        - the possibilities are endless
+        - only time will tell
+        - a bright future
+        - the journey continues
+        - the sky is the limit
+      fr:
+        - "l'avenir s'annonce prometteur"
+        - "l'avenir nous le dira"
+        - les possibilités sont infinies
+        - une aventure passionnante
+        - de belles perspectives
+    must_not_flag: A concrete plan or date (the future release adds batching).
+
+  - id: '26'
+    name: Abstract metaphor noun
+    source: { skill: cursor/plugins@unslop, rule: '26' }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    skip_proper_nouns: true
+    terms:
+      en:
+        - substrate
+        - wedge
+        - vector
+        - locus
+        - nexus
+        - bedrock
+        - endgame
+        - north star
+        - flywheel
+        - scaffolding
+        - paradigm
+    except:
+      - 'vector\s+(?:database|db|search|store|index|embeddings?|clock|register|graphics)'
+      - '(?:simd|attack|feature|initiali[sz]ation|test)\s+vectors?'
+      - '(?:programming|functional|reactive|actor|object-oriented)\s+paradigms?'
+      - '(?:project|code|test)\s+scaffolding'
+    must_not_flag: >-
+      Literal technical collocations (vector database, SIMD vectors, functional
+      paradigm, project scaffolding) and product names (Amazon Bedrock).
+
   - id: '27'
     name: Feeling over mechanism
     source: { skill: cursor/plugins@unslop, rule: '27' }
@@ -291,6 +495,89 @@ rules:
       The [confirm ...] marker, which is the Open items convention and stays a
       verify-letter warning (the agent cannot resolve it); parentheses; XXL and
       roman-numeral centuries such as XXe.
+
+  - id: '36'
+    name: Hook line
+    source: { skill: aboudjem/humanizer, rule: P41 Infomercial engagement hooks }
+    severity: block
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    patterns:
+      en:
+        - '(?:^|(?<=[.!?]\s{1,3}))(?:The\s+(?:catch|kicker|twist|best\s+part|bottom\s+line)\?|Here(?:[''’]s|\s+is)\s+the\s+thing[.:]|Sound\s+familiar\?|Let\s+that\s+sink\s+in[.!]|Read\s+that\s+again[.!]|Plot\s+twist[:.!]|Full\s+stop[.!])'
+    must_not_flag: A sentence that uses the word catch or twist as a plain noun (The catch rate rose).
+
+  - id: '37'
+    name: Hedged-enumeration opener
+    source: { skill: aboudjem/humanizer, rule: P53 Hedged-enumeration openers }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    terms:
+      en:
+        - there are several ways to
+        - there are a few things to consider
+        - there are many factors
+        - there are several reasons
+        - here are a few
+        - here are some
+    must_not_flag: A counted statement (There are 3 services in the stack).
+
+  - id: '38'
+    name: Argument residue
+    source: { skill: aboudjem/humanizer, rule: P54 Argument residue }
+    severity: warn
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en]
+    terms:
+      en:
+        - while some might argue
+        - some might argue
+        - it would be easy to dismiss
+        - one might think
+        - it could be argued
+        - critics may say
+        - at first glance
+    must_not_flag: A rebuttal of an objection the text itself raised earlier; a first glance (no "at").
+
+  - id: '39'
+    name: Meta commentary
+    source: { skill: aboudjem/humanizer, rule: Meta commentary }
+    severity: block
+    detect: match-list
+    scope: prose
+    kinds: all
+    lang: [en, fr]
+    terms:
+      en:
+        - in this article
+        - in this post
+        - in this essay
+        - in this section
+        - let me walk you through
+        - "let's dive in"
+        - let us dive in
+        - "let's explore"
+        - "let's unpack"
+        - "here's a comprehensive overview"
+        - here is a comprehensive overview
+        - without further ado
+        - allow me to introduce myself
+      fr:
+        - dans cet article
+        - dans ce billet
+        - dans cette section
+        - permettez-moi de vous présenter
+        - laissez-moi vous expliquer
+        - sans plus attendre
+        - plongeons dans
+    must_not_flag: In this role (a role description is content, not commentary about the text).
 
   - id: '40'
     name: Unicode obfuscation
