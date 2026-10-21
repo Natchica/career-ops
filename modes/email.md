@@ -88,8 +88,10 @@ the module adds a standard where this mode had none; it never overrides the
 user's own rules.
 
 `_writing.md` governs wording only. This mode's output contract — variants,
-attachment checklist, subject/body structure, the draft-only rule — is set here
-and is not affected by it.
+attachment checklist, the draft-only rule — is set here and is not affected by
+it. The subject/body structure of the `hr_application` and `cold_application`
+variants is set by blocks 4-12 of `voice-dna.md` §1 (the letter contract), not
+restated here.
 
 ### Tailored CV alignment source
 
@@ -228,13 +230,15 @@ Subject: {subject}
 {email body}
 ```
 
-### HR application structure
+### HR and cold application structure
 
-1. Greeting
-2. Role intent and attachment sentence
-3. 2-3 fit points in one short paragraph or compact bullets
-4. Why this role is relevant, using JD language
-5. Contact block and signature
+Blocks 4-12 of `voice-dna.md` §1, in email form, 150-250 words:
+
+- The Subject follows block 4: `Application: {role}` (`Candidature au poste de {role}` in a French email), plus the reference number when the posting gives one; a cold application names the profile instead of a role.
+- Salutation, opening fact, two proof claims, the objective in one or two sentences, and the closing with the interview call to action. "My CV is attached" and the on-request sentence for diplomas, certificates and references sit in block 9.
+- A cold application opens with one confirmed fact about the company (never "I am looking for a job"), gives two proof points tied to the company's domain, and asks for a specific next step: a short call, the right contact, or permission to send the CV.
+- No Annexes line: the attachment checklist (Step 4) covers it.
+- Contact block and signature as set in the Contact Block section.
 
 ### Referral request structure
 
@@ -243,14 +247,6 @@ Subject: {subject}
 3. 2 concise proof points that are easy to forward
 4. Low-pressure ask: "If this looks aligned, would you be comfortable referring
    me or pointing me to the right person?"
-5. Contact block and signature
-
-### Cold application structure
-
-1. Greeting
-2. Value proposition first, not "I am looking for a job"
-3. 2 proof points tied to the company/domain
-4. Specific ask: short call, right contact, or permission to send CV
 5. Contact block and signature
 
 ---
@@ -530,6 +526,16 @@ additions.
 
 ---
 
+## Step 6 — Check the body
+
+For `hr_application` and `cold_application` only. Write the email body (salutation to name) to `/tmp/email-body-{company-slug}.txt`, a check input and not a saved draft, and run:
+
+```bash
+node verify-letter.mjs /tmp/email-body-{company-slug}.txt --kind email --company "{company}"
+```
+
+The checker is warn-only. Fix every finding that rewording solves, run it once more, and show the findings that remain after the draft. A finding left in place is a decision for the candidate, so it goes into the Open items.
+
 ## Output
 
 Return in this order:
@@ -540,6 +546,8 @@ Return in this order:
    - Language
 2. Attachment checklist, unless disabled
 3. Subject and email body
-4. One-line note with any missing inputs or assumptions
+4. For `hr_application` and `cold_application`: the `verify-letter.mjs` findings, or "Letter check passed: no findings."
+5. **Open items**, one line each, only those that apply: the company fact in the opening with its source URL, the objective sentence, how a gap is worded, the salutation name and where it came from (or `[confirm name]`), the German sentence, the attached files
+6. One-line note with any missing inputs or assumptions
 
 Do not write files unless the user explicitly asks to save the draft.
