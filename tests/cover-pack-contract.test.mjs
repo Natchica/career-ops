@@ -34,12 +34,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildHtml } from '../generate-cover-letter.mjs';
 
-/** The 15 cover-letter slots the pack authoring contract declares. */
+/** The 17 cover-letter slots the pack authoring contract declares. */
 const CONTRACT_SLOTS = [
   'NAME', 'ROLE_TITLE', 'CONTACT_LINE', 'DATELINE', 'RECIPIENT_BLOCK',
   'GREETING_BLOCK', 'OPENING', 'PROFILE_INTRO', 'PROBLEMS_BLOCK',
   'ACHIEVEMENTS_BLOCK', 'CREDENTIALS_BLOCK', 'CLOSING_BLOCK',
   'LANGUAGE_CLOSING_BLOCK', 'SIGNATURE_BLOCK', 'FOOTNOTES_BLOCK',
+  'OBJET_LINE', 'ANNEXES_BLOCK',
 ];
 
 /**
@@ -82,6 +83,9 @@ const FULL = {
     company: 'LETTER-COMPANY-SENTINEL',
     city: 'LETTER-CITY-SENTINEL',
     date: 'DATE-SENTINEL',
+    objet: 'OBJET-SENTINEL',
+    annexes: ['ANNEX-ONE-SENTINEL', 'ANNEX-TWO-SENTINEL'],
+    annexes_label: 'ANNEX-LABEL-SENTINEL',
     recipient: {
       name: 'RECIPIENT-NAME-SENTINEL',
       title: 'RECIPIENT-TITLE-SENTINEL',
@@ -128,6 +132,10 @@ const SLOT_VALUES = [
   ['LANGUAGE_CLOSING_BLOCK', FULL.letter.language_closing],
   ['SIGNATURE_BLOCK', FULL.letter.signature.valediction],
   ['FOOTNOTES_BLOCK', FULL.letter.footnotes[0]],
+  ['OBJET_LINE', FULL.letter.objet],
+  ['ANNEXES_BLOCK', FULL.letter.annexes[0]],
+  ['ANNEXES_BLOCK', FULL.letter.annexes[1]],
+  ['ANNEXES_BLOCK', FULL.letter.annexes_label],
 ];
 
 test('a template carrying every contract slot renders at all', () => {
