@@ -37,7 +37,7 @@ const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
-const QUERY = 'in:sent subject:"Candidature spontanée"';
+const QUERY = 'in:sent (subject:"Candidature spontanée" OR subject:"Spontaneous application")';
 const GMAIL_ENV = ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN'];
 const FETCH_BATCH = 4;
 const REGISTRY_SPEC = { key: 'thread_id', columns: REGISTRY_COLUMNS };
