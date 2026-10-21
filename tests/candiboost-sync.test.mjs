@@ -81,7 +81,8 @@ test('fetchSentThreads pages the list, then gets each thread in full', async () 
   assert.deepEqual(threads.map((t) => t.id), ['cb0001', 'cb0002', 'cb0003', 'cb0004']);
   const list = urls.filter((u) => u.includes('/threads?'));
   assert.equal(list.length, 2);
-  assert.ok(list[0].includes('q=in%3Asent%20subject%3A%22Candidature%20spontan%C3%A9e%22'), list[0]);
+  const q = decodeURIComponent(list[0].match(/q=([^&]+)/)[1]);
+  assert.ok(q.includes('subject:"Candidature spontanée"') && q.includes('subject:"Spontaneous application"') && q.startsWith('in:sent'), q);
   assert.ok(urls.some((u) => u.endsWith('/threads/cb0004?format=full')));
 });
 
