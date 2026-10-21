@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ROLE_TITLE}} | {{NAME}}</title>
+<style>
+  /* Swiss letter pack: sender block, recipient block and dateline on the right,
+     Objet line, prose paragraphs, valediction, Annexes line. One column, no
+     tables, no lists. Themeable tokens (#1837): overridable via config/profile.yml
+     `style:`, which the PDF pipeline injects as a later :root block. */
+  :root {
+    --accent-color: #1A56A0;
+    --font-family: "Helvetica", Arial, sans-serif;
+    --font-size: 10pt;
+    /* Matches generate-pdf.mjs's PDF_PAGE_MARGIN. */
+    --page-margin: 0.6in;
+  }
+  @page { margin: var(--page-margin); }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    /* Disable fi/fl/ffi ligatures so PDF text extractors read plain letters. */
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    line-height: 1.4;
+    color: #1a1a1a;
+    background: #ffffff;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+  }
+
+  .name {
+    font-weight: 700;
+    font-size: 12pt;
+    margin-bottom: 2pt;
+  }
+
+  .contact {
+    font-size: 9pt;
+    color: #444444;
+    line-height: 1.3;
+    margin-bottom: 14pt;
+  }
+
+  .contact a {
+    color: var(--accent-color);
+    text-decoration: none;
+  }
+
+  .recipient {
+    margin-left: 55%;
+    margin-bottom: 10pt;
+  }
+
+  .dateline {
+    margin-left: 55%;
+    margin-bottom: 14pt;
+  }
+
+  .objet {
+    font-weight: 700;
+    margin-bottom: 12pt;
+  }
+
+  .greeting {
+    margin-bottom: 8pt;
+  }
+
+  p {
+    margin-bottom: 8pt;
+  }
+
+  .language-closing {
+    font-style: italic;
+  }
+
+  .signature {
+    margin-top: 12pt;
+    margin-bottom: 10pt;
+  }
+
+  .annexes {
+    font-size: 9pt;
+    color: #444444;
+  }
+</style>
+</head>
+<body>
+  <div class="sender">
+    <div class="name">{{NAME}}</div>
+    <div class="contact">{{CONTACT_LINE}}</div>
+  </div>
+  {{RECIPIENT_BLOCK}}
+  <div class="dateline">{{DATELINE}}</div>
+  {{OBJET_LINE}}
+  {{GREETING_BLOCK}}
+  <p>{{OPENING}}</p>
+  <p>{{PROFILE_INTRO}}</p>
+  {{PROBLEMS_BLOCK}}
+  {{CLOSING_BLOCK}}
+  {{LANGUAGE_CLOSING_BLOCK}}
+  {{SIGNATURE_BLOCK}}
+  {{ANNEXES_BLOCK}}
+</body>
+</html>
