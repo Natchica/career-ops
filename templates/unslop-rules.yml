@@ -56,6 +56,25 @@ rules:
       Two different things with similar names (the iExec middleware and the Nox
       protocol).
 
+  - id: '13'
+    name: Em dash or en dash used as a dash
+    source: { skill: cursor/plugins@unslop, rule: '13' }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: all
+    lang: all
+    patterns:
+      all:
+        - '—'
+        - '(?<=\s)–(?=\s)'
+        - '(?<=\s)--(?=\s)'
+    must_not_flag: >-
+      An unspaced range dash (250-350 words, 2024-2026, Basel-Zurich) and a
+      hyphenated compound (end-to-end, EU-CH). voice-dna.md section 2 allows
+      commas, colons, semicolons and parentheses in place of a dash, so
+      parentheses are never a finding.
+
   - id: '14'
     name: Colon connector
     source: { skill: cursor/plugins@unslop, rule: '14' }
@@ -68,6 +87,23 @@ rules:
     kinds: all
     lang: all
     must_not_flag: A colon before a list, an example, a time or a ratio.
+
+  - id: '15'
+    name: Boldface in prose
+    source: { skill: cursor/plugins@unslop, rule: '15' }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: [letter, email, message, text]
+    lang: all
+    patterns:
+      all:
+        - '\*\*[^*\n]+\*\*'
+        - '(?<![\p{L}\p{N}_])__[^_\n]+__(?![\p{L}\p{N}_])'
+    must_not_flag: >-
+      Bold in a form answer or a CV (kinds answer and cv are exempt); a single
+      asterisk in a product such as 2*3. voice-dna.md section 2: a formal letter
+      carries no bold text at all.
 
   - id: '16'
     name: Inline-header list
@@ -94,6 +130,42 @@ rules:
     kinds: all
     lang: all
     must_not_flag: A heading with product or company names capitalised.
+
+  - id: '18'
+    name: Emoji
+    source: { skill: cursor/plugins@unslop, rule: '18' }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: all
+    lang: all
+    patterns:
+      all:
+        - '(?![©®™←-⇿])\p{Extended_Pictographic}'
+        - '[\u{1F1E6}-\u{1F1FF}]'
+        - '⃣'
+    must_not_flag: >-
+      Copyright, registered and trademark signs, arrows (rule 33 owns those), and
+      programming names such as C++ and C#.
+
+  - id: '19'
+    name: Curly quotes
+    source: { skill: cursor/plugins@unslop, rule: '19' }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: all
+    lang: [en, fr]
+    patterns:
+      en:
+        - '[‘’‚‛“”„‟]'
+      fr:
+        - '[‘‚‛“”„‟]'
+        - '(?<!\p{L})’'
+        - '’(?!\p{L})'
+    must_not_flag: >-
+      Straight quotes; French elision between letters (l'equipe typed with a curly
+      apostrophe); French guillemets.
 
   - id: '27'
     name: Feeling over mechanism
@@ -134,6 +206,38 @@ rules:
     lang: all
     must_not_flag: A literal technical term used literally.
 
+  - id: '33'
+    name: "Over-compression: arrows, w/"
+    source: { skill: cursor/plugins@unslop, rule: '33' }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: [letter, email, answer, text]
+    lang: all
+    patterns:
+      all:
+        - '[←-⇿⟰-⟿⤀-⥿]'
+        - '(?<=\s)(?:->|=>|<-)(?=\s)'
+        - '(?<![\p{L}\p{N}/])w\/o?(?=\s|\p{L})'
+    must_not_flag: >-
+      Arrows in a CV or a message (kinds cv and message are exempt: a CV bullet
+      and a chat message are compressed by nature); w/ inside a URL path.
+
+  - id: '33b'
+    name: "Over-compression: ampersand in prose"
+    source: { skill: cursor/plugins@unslop, rule: '33' }
+    severity: warn
+    detect: match-list
+    scope: text
+    kinds: [letter, email, answer, text]
+    lang: all
+    case_sensitive: true
+    patterns:
+      all:
+        - '(?<=\p{Ll})\s&\s(?=\p{Ll})'
+    must_not_flag: >-
+      Company and product names (R&D, AT&T, Procter & Gamble).
+
   - id: '33c'
     name: "Over-compression: verbless fragment"
     source: { skill: cursor/plugins@unslop, rule: '33' }
@@ -146,6 +250,64 @@ rules:
     kinds: [letter, email, answer, text]
     lang: all
     must_not_flag: A signature, a heading or a contact line.
+
+  - id: '34'
+    name: Markdown bleeding
+    source: { skill: aboudjem/humanizer, rule: P28 Markdown bleeding }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: [letter, email, message, text]
+    lang: all
+    patterns:
+      all:
+        - '^[ \t]{0,3}#{1,6}[ \t]+\S'
+        - '^[ \t]{0,3}(?:[-*+]|\d{1,2}[.)])[ \t]+\S'
+        - '\[[^\]\n]+\]\((?:https?:\/\/|www\.|\/)[^)\s]*\)'
+        - '`[^`\n]+`'
+        - '^[ \t]{0,3}>[ \t]'
+        - '^[ \t]*\|.*\|[ \t]*$'
+    must_not_flag: >-
+      Bullets in a form answer or a CV (voice-dna.md section 2 allows them there;
+      kinds answer and cv are exempt), a phone line starting with a plus sign,
+      C# and F#, a version number such as 9.0.0.
+
+  - id: '35'
+    name: Placeholder
+    source: { skill: aboudjem/humanizer, rule: P33 Placeholder text }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: all
+    lang: all
+    case_sensitive: true
+    patterns:
+      all:
+        - '\[(?![Cc]onfirm(?!\p{L}))[^\]\n]{1,60}\](?!\()'
+        - '\{\{?[\p{L}_][\p{L}\p{N}_ .-]{0,40}\}\}?'
+        - '(?<![\p{L}\p{N}])X{2,}(?![\p{L}\p{N}])'
+        - '(?<!\p{L})(?:TBD|TODO|FIXME|[Ll]orem\s+ipsum)(?!\p{L})'
+    must_not_flag: >-
+      The [confirm ...] marker, which is the Open items convention and stays a
+      verify-letter warning (the agent cannot resolve it); parentheses; XXL and
+      roman-numeral centuries such as XXe.
+
+  - id: '40'
+    name: Unicode obfuscation
+    source: { skill: aboudjem/humanizer, rule: Unicode obfuscation }
+    severity: block
+    detect: match-list
+    scope: text
+    kinds: all
+    lang: all
+    case_sensitive: true
+    patterns:
+      all:
+        - '[​-‏‪-‮⁠-⁤⁦-⁩﻿­]'
+        - '(?<!\p{L})(?=\p{L}*\p{Script=Latin})(?=\p{L}*[аеорсухіјѕԁһԛԝАВЕКМНОРСТХІЈЅαεικνορτυχΑΒΕΗΙΚΜΝΟΡΤΥΧΖ])\p{L}+'
+    must_not_flag: >-
+      A space before a percent sign, narrow-space thousands separators, Greek
+      unit symbols (mu s), accented Latin letters (Zurich with an umlaut).
 
 cannot_catch:
   - id: meaning
