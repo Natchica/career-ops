@@ -105,9 +105,9 @@ Each gap is either written into block 8 as what the evidence covers (never as a 
 
 ---
 
-## Step 6 — Draft the letter in chat
+## Step 6 — Draft the letter
 
-Write the full letter as plain text in the chat, following blocks 1-12 of `voice-dna.md` §1:
+Draft the full letter as plain text following blocks 1-12 of `voice-dna.md` §1, and do not show it yet: Step 7 shows the gated text.
 
 - **Proof (block 7):** 2-3 claims from `cv.md` only. Read all bullets across all roles, score each against the JD's top 3-4 competencies, pick the highest-scoring with a number each. Use the exact wording and metrics from `cv.md`; never paraphrase a number or invent one. Tell one of them as a short concrete episode (what was slow or coupled, what was done, what the measurement showed).
 - **Objective (block 8):** one or two goals for this role, forward-looking, drawn from the exit narrative in `modes/_profile.md` and from the posting. A gap, when one is written at all, is stated here as coverage.
@@ -116,15 +116,15 @@ Write the full letter as plain text in the chat, following blocks 1-12 of `voice
 - **Objet (block 4):** `Candidature au poste de {role}` in a French letter, `Application: {role}` otherwise, plus the reference number when there is one.
 - **Annexes (block 12):** only files that are actually attached (the CV; add others only when the candidate has said so).
 
-## Step 7 — Check
+## Step 7 — Outbound text gate
 
-Write the letter body (salutation to name) to `/tmp/cover-draft-{company-slug}.txt` and run:
+Write the letter (salutation to name) to `/tmp/cover-draft-{company-slug}.txt` and run the Outbound text gate (`modes/_writing.md`), kind `letter`. Its scan command:
 
 ```bash
 node verify-letter.mjs /tmp/cover-draft-{company-slug}.txt --kind letter --company "{company}"
 ```
 
-The checker is warn-only. Fix every finding that rewording solves, run it once more, and show the findings that remain with the letter. Do not argue a finding away: a finding left in place is a decision for the candidate, so it also goes into the Open items.
+It exits `2` while a block finding is left. Do not argue a finding away: a finding left in place is a decision for the candidate, so it goes into the Open items.
 
 ## Step 8 — Open items
 
@@ -136,6 +136,7 @@ After the letter and the checker output, list the **Open items**, one line each,
 4. The salutation name and where it came from, or `[confirm name]`.
 5. The German sentence, when the employer is Swiss, German or Austrian.
 6. The files named in the Annexes line.
+7. The findings the Outbound text gate left, and any block finding still present after 2 passes.
 
 End with: "How does this read? Once you approve I'll generate the PDF."
 
@@ -257,5 +258,5 @@ When invoked as `/career-ops cover {slug}`:
 1. Find the matching report in `reports/` by slug
 2. Extract the `## Cover Letter Draft` section — use it as a pre-populated starting point for the draft
 3. Run all steps as normal (research, keywords, gaps, draft, check, Open items) — the draft is a starting point, not the final output
-4. When presenting the draft in Step 6, show what was auto-generated and what was changed
+4. When presenting the draft in Step 7, show what was auto-generated and what was changed
 5. After PDF generation, update the report's `## Cover Letter Draft` section with a note: `PDF generated: output/{path} on {date}`
