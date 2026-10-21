@@ -3552,16 +3552,18 @@ if (shared.includes('_profile.md')) {
   const coverSrc = readFile('modes/cover.md');
   const emailSrc = readFile('modes/email.md');
   const contractsIntact =
-    /350-420 words/.test(coverSrc) &&
-    /Bullet format/.test(coverSrc) &&
+    /`voice-dna\.md` §1/.test(coverSrc) &&
+    /verify-letter\.mjs/.test(coverSrc) &&
+    /Open items/.test(coverSrc) &&
     /Self-check/.test(coverSrc) &&
-    /Tone consistency/.test(coverSrc) &&
+    /`voice-dna\.md` §1/.test(emailSrc) &&
+    /verify-letter\.mjs/.test(emailSrc) &&
     /Attachment checklist/i.test(emailSrc) &&
     /Do not write files unless the user explicitly asks/.test(emailSrc);
   if (contractsIntact) {
     pass('cover/email output contracts survived the _writing.md delegation (#2006)');
   } else {
-    fail('a cover/email output contract (word count, bullet format, self-check, tone, attachments, draft-only) went missing (#2006)');
+    fail('a cover/email output contract (letter structure pointer, verify-letter check, Open items, self-check, attachments, draft-only) went missing (#2006)');
   }
 }
 
