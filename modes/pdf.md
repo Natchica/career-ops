@@ -413,17 +413,9 @@ Want a cover letter for this role too?
 
 Apply `voice-dna.md` (if present) to the cover letter — full guardrail, conversational voice included (Tier 1 + Tier 2). The CV PDF itself stays Tier 1 only (formal ATS register). See `_writing.md` → Voice DNA.
 
-If the user says yes, run the full cover letter flow from `modes/cover.md` in slug mode:
-1. Load the existing `## Cover Letter Draft` from the evaluation report as a starting point
-2. Run company research (Step 3 of cover.md)
-3. Present keyword list for confirmation (Step 4)
-4. Surface any gaps (Step 5)
-5. Ask the four prompts: why / problems / approach / tone (Step 6)
-6. Draft in chat, wait for approval (Steps 7-8)
-7. Generate cover letter PDF via `node generate-cover-letter.mjs` (Step 9)
-8. Report both PDF paths
+If the user says yes, run `modes/cover.md` in slug mode; it owns the steps (research, draft to `voice-dna.md` §1, `verify-letter.mjs`, Open items, PDF only on explicit approval). Report both PDF paths.
 
-Do not auto-generate the cover letter PDF without going through the interactive steps above.
+Never auto-generate the cover letter PDF without the candidate's explicit approval of the draft.
 
 ## Post-generation
 
