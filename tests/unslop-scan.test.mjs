@@ -236,6 +236,56 @@ test('7 and 26: must not flag product names or listed technical collocations', (
   assert.equal(has('Realm of caching is next.', '7', { lang: 'en' }), true);
 });
 
+test('9: fires on negative parallelism in English and French', () => {
+  for (const text of ['This is not just a tool but a platform.', 'It is not about speed, it is about safety.', 'This isn’t a rewrite. It is a migration.']) {
+    assert.equal(has(text, '9', { lang: 'en' }), true, text);
+  }
+  for (const text of ['Ce service est non seulement rapide mais fiable.', 'Ce n’est pas un outil, c’est une méthode.']) {
+    assert.equal(has(text, '9', { lang: 'fr' }), true, text);
+  }
+});
+
+test('9: must not flag the Optravis gap sentence, a lone not only, or a plain French negation', () => {
+  const gap = 'My infrastructure experience covers Docker, CI/CD pipelines and an OCI image for a Java tool, and I have not run production cloud infrastructure at scale. I am therefore open to backend and platform roles generally.';
+  assert.equal(has(gap, '9', { lang: 'en' }), false);
+  assert.equal(has('The service is not only for internal use.', '9', { lang: 'en' }), false);
+  assert.equal(has('Il n’y a pas de régression.', '9', { lang: 'fr' }), false);
+});
+
+test('3: fires on -ing tails after a comma', () => {
+  for (const text of ['The team shipped it, highlighting its importance.', 'It works, ensuring reliability for users.']) {
+    assert.equal(has(text, '3', { lang: 'en' }), true, text);
+  }
+  assert.equal(has('Il a livré le service, témoignant d’une culture solide.', '3', { lang: 'fr' }), true);
+  // A digit in the tail is a fact, not a filler, but only inside the same clause.
+  assert.equal(has('It works, ensuring reliability. Release 2.0 shipped.', '3', { lang: 'en' }), true);
+});
+
+test('3: must not flag a measured tail or ordinary participles', () => {
+  assert.equal(has('It works, ensuring 99.9% uptime.', '3', { lang: 'en' }), false);
+  for (const text of ['We are building, logging and streaming events.', 'It ran well, building trust over time.']) {
+    assert.equal(has(text, '3', { lang: 'en' }), false, text);
+  }
+  for (const text of ['Il travaille pendant la nuit, maintenant le service.', 'C’est important, permettant de livrer vite.']) {
+    assert.equal(has(text, '3', { lang: 'fr' }), false, text);
+  }
+});
+
+test('12: fires on a false range, must not flag real ranges or the cv kind', () => {
+  assert.equal(has('It covers everything from ancient traditions to modern innovations.', '12', { lang: 'en' }), true);
+  for (const text of ['The service runs from design to production.', 'We moved from Java 11 to Java 17.', 'We moved from Jenkins to GitHub Actions.']) {
+    assert.equal(has(text, '12', { lang: 'en' }), false, text);
+  }
+  assert.equal(has('It covers everything from ancient traditions to modern innovations.', '12', { lang: 'en', kind: 'cv' }), false);
+});
+
+test('24: fires on stacked hedges, must not flag one may', () => {
+  for (const text of ['It could potentially improve latency.', 'It might possibly work.']) {
+    assert.equal(has(text, '24', { lang: 'en' }), true, text);
+  }
+  assert.equal(has('It may improve latency.', '24', { lang: 'en' }), false);
+});
+
 test('scanText is exported with ids()', () => {
   assert.deepEqual(ids('Plain text.'), []);
 });
