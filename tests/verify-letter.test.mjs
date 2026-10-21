@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as vl from '../verify-letter.mjs';
 import * as lib from '../lib/letter-text.mjs';
-import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, loadBannedLists, parseVoiceDna, splitBody } from '../verify-letter.mjs';
+import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, loadBannedLists, parseVoiceDna, splitBody, verifyLetter } from '../verify-letter.mjs';
 
 test('verify-letter re-exports the shared text helpers from lib/letter-text.mjs', () => {
   assert.equal(vl.detectLang, lib.detectLang);
@@ -425,7 +425,7 @@ test('--help and -h print the same usage and exit 0', () => {
 test('voice-dna.md under the data root feeds banned-word; its absence prints a note', () => {
   const zorblax = CLEAN_EN_EMAIL.replace('Rust is my first choice', 'Zorblax is my first choice');
   const custom = run([file('z.txt', zorblax), '--company', 'Example AG'], sandbox(VOICE_DNA_FIXTURE.replace('delve,', 'delve, zorblax,')));
-  assert.equal(custom.status, 0, custom.stderr);
+  assert.equal(custom.status, 2, custom.stderr);
   assert.match(custom.stdout, /banned-word/);
   assert.doesNotMatch(custom.stderr, /built-in/);
 
@@ -433,4 +433,65 @@ test('voice-dna.md under the data root feeds banned-word; its absence prints a n
   assert.equal(bare.status, 0);
   assert.match(bare.stderr, /built-in/);
   assert.doesNotMatch(bare.stdout, /banned-word/);
+});
+
+test('checkLetter findings carry a severity: block for banned-word, contraction, em-dash and exclamation, warn otherwise', () => {
+  const severityOf = (text, code) => checkLetter(text, LETTER).find((f) => f.code === code)?.severity;
+  assert.equal(severityOf(swap('measured a 75% gain', 'leverage a 75% gain'), 'banned-word'), 'block');
+  assert.equal(severityOf(swap('I look forward', "I'm looking forward"), 'contraction'), 'block');
+  assert.equal(severityOf(swap('first choice, and', 'first choice — and'), 'em-dash'), 'block');
+  assert.equal(severityOf(swap('tests that stay green.', 'tests that stay green!'), 'exclamation'), 'block');
+  assert.equal(severityOf(swap('will present', 'would present'), 'conditional'), 'warn');
+  assert.equal(severityOf(swap('Dear Example AG team,', 'Dear [confirm name],'), 'unconfirmed-marker'), 'warn');
+});
+
+test('em-dash, banned-word, stock-phrase and filler-opener findings carry the terms they matched', () => {
+  const termsOf = (text, code) => checkLetter(text, LETTER).find((f) => f.code === code)?.terms;
+  assert.deepEqual(termsOf(swap('first choice, and', 'first choice — and'), 'em-dash'), ['—']);
+  assert.deepEqual(termsOf(swap('measured a 75% gain', 'leverage a 75% gain'), 'banned-word'), ['leverage']);
+  assert.deepEqual(termsOf(swap('reviewers merge', 'dynamic reviewers merge'), 'stock-phrase'), ['dynamic']);
+  assert.deepEqual(termsOf(swap('Example AG builds', 'Allow me to explain why Example AG builds'), 'filler-opener'), ['allow me']);
+});
+
+test('verifyLetter keeps the clean fixtures clean and adds unslop findings', () => {
+  assert.deepEqual(verifyLetter(CLEAN_EN_LETTER, LETTER), []);
+  assert.deepEqual(verifyLetter(CLEAN_EN_EMAIL, { kind: 'email', lang: 'en', company: 'Example AG' }), []);
+  assert.deepEqual(verifyLetter(CLEAN_FR_LETTER, FR_LETTER), []);
+
+  const tail = verifyLetter(swap('The strongest evidence is a rewrite.', 'The strongest evidence is a rewrite, highlighting its importance.'), LETTER);
+  assert.equal(tail.find((f) => f.code === 'unslop-3')?.severity, 'warn');
+  const emoji = verifyLetter(swap('Rust is my first choice', 'Rust \u{1F680} is my first choice'), LETTER);
+  assert.equal(emoji.find((f) => f.code === 'unslop-18')?.severity, 'block');
+});
+
+test('verifyLetter de-duplicates by cause and keeps the higher severity', () => {
+  const found = (text, opts = LETTER) => verifyLetter(text, opts);
+  const codesOf = (text, opts) => found(text, opts).map((f) => f.code);
+
+  const dash = swap('first choice, and', 'first choice \u2014 and');
+  assert.ok(codesOf(dash).includes('em-dash'));
+  assert.ok(!codesOf(dash).includes('unslop-13'));
+  assert.equal(found(dash).find((f) => f.code === 'em-dash').severity, 'block');
+  assert.ok(codesOf(swap('first choice, and', 'first choice -- and')).includes('unslop-13'));
+
+  const leverage = swap('measured a 75% gain', 'leverage a 75% gain');
+  assert.ok(codesOf(leverage).includes('banned-word'));
+  assert.ok(!codesOf(leverage).includes('unslop-31'));
+
+  const cluster = swap('Rust is my first choice, and Java is an equal one.', 'A robust and seamless stack is my first choice.');
+  assert.ok(codesOf(cluster).includes('banned-word'));
+  assert.ok(!codesOf(cluster).includes('unslop-7b'));
+
+  const filler = swap('Example AG builds', 'I hope this helps explain why Example AG builds');
+  assert.equal(found(filler).find((f) => f.code === 'filler-opener')?.severity, 'block');
+  assert.ok(!codesOf(filler).includes('unslop-20'));
+
+  assert.deepEqual(codesOf(''), ['empty-body']);
+});
+
+test('a block finding exits 2 and prints the block count', () => {
+  const r = run([file('dash.txt', swap('first choice, and', 'first choice \u2014 and')), '--kind', 'letter', '--company', 'Example AG']);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stdout, /Letter check: \d+ findings?, 1 block/);
+  assert.match(r.stdout, /\u2716 em-dash:/);
 });
