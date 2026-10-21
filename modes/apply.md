@@ -300,6 +300,10 @@ For each question, generate the response following:
 6. **Recruiter-side risk map**: Use `modes/heuristics/recruiter-side.md` to identify what doubt the question is trying to resolve (motivation, stack fit, logistics, comp, work-auth, availability, seniority) and answer that doubt directly.
 7. **Disclosure discipline**: Answer logistics questions truthfully when asked, but do not volunteer sensitive or HR-only details in unrelated motivation/fit answers.
 
+Read `modes/_writing.md` → Outbound text gate; this mode does not load it otherwise.
+
+Run the Outbound text gate (`modes/_writing.md`), kind `answer`, on each free-text answer, scanned alone without its `###` heading and `>` wrapper, before you count its length. The count below is taken on the corrected answer. A field marked "Ask candidate" has no text to gate.
+
 Before marking any free-text answer ready for copy-paste, count the **final** response against that field's confirmed limit, including spaces and punctuation. For HTML `maxlength`, use the browser's JavaScript string length (UTF-16 code units), the same measure the control enforces. For a word limit, follow the form's displayed counter when available. Shorten and recount any over-limit answer; if it still cannot fit without losing essential facts, flag it for the candidate to revise instead of presenting it as ready. Recheck after every edit. Show `used/allowed characters` (or words) next to each answer with a confirmed limit; show `limit unknown` when no limit was confirmed. A missing limit is never proof that an answer fits.
 
 **Output format:**
@@ -326,6 +330,7 @@ Repeat the response and length lines for every remaining question.
 Notes:
 - [Any observations about the role, changes, etc.]
 - [Personalization suggestions the candidate should review]
+- [Open items the Outbound text gate left, per question]
 ```
 
 ## Step 7b — Pre-action required-field sweep
