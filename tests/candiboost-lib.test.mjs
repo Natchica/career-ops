@@ -33,6 +33,41 @@ test('the company sentence reads "de X" and the elided "d’X", and drops an art
   assert.equal(extractCompany('Bonjour M. Huber,\nVous trouverez mon CV.'), '');
 });
 
+function b64url(text) { return Buffer.from(text, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function englishSend({ subject, greeting, company }) {
+  const body = `${greeting}\n\nBackend engineering is my field, and ${company} is one of the teams I want to work with. At iExec, I was lead developer on 3 production services in Rust.\n\nKind regards,\nNathan GAUD\n`;
+  return {
+    id: 'en0001', labelIds: ['SENT'], internalDate: String(Date.parse('2026-10-29T10:05:00Z')),
+    payload: {
+      mimeType: 'multipart/mixed',
+      headers: [{ name: 'Subject', value: subject }, { name: 'To', value: 'anna.keller@pistor.ch' }, { name: 'From', value: 'Nathan Gaud <candidate@example.com>' }],
+      parts: [{ mimeType: 'text/plain', filename: '', body: { data: b64url(body) } }, { mimeType: 'application/pdf', filename: 'Nathan-Gaud.pdf', body: { attachmentId: 'a1' } }],
+    },
+  };
+}
+
+test('the English template mail is a Candiboost send: subject, greeting and company are read', () => {
+  const m = englishSend({ subject: 'Spontaneous application: backend software engineer, Nathan GAUD', greeting: 'Dear M. Keller,', company: 'Pistor' });
+  const p = parseThread({ id: 'en0001', messages: [m] });
+  assert.equal(p.ok, true, JSON.stringify(p));
+  assert.equal(p.record.company_raw, 'Pistor');
+  assert.equal(p.record.civility, 'M.');
+  assert.equal(p.record.contact_name, 'Anna Keller');
+  assert.equal(p.record.domain, 'pistor.ch');
+});
+
+test('an English greeting with Mme and a company with a legal suffix', () => {
+  const m = englishSend({ subject: 'Spontaneous application: backend software engineer, Nathan GAUD', greeting: 'Dear Mme Keller,', company: 'Acme SA' });
+  const p = parseThread({ id: 'en0002', messages: [m] });
+  assert.equal(p.record.civility, 'Mme');
+  assert.equal(p.record.company_raw, 'Acme SA');
+});
+
+test('a subject that is neither template is still skipped', () => {
+  const m = englishSend({ subject: 'Spontaneous application to somewhere', greeting: 'Dear M. Keller,', company: 'Pistor' });
+  assert.equal(parseThread({ id: 'x', messages: [m] }).reason, 'subject');
+});
+
 test('a hyphenated first name keeps both capitals and a missing company sentence is empty', () => {
   const p = parseThread(T.cb0007);
   assert.equal(p.record.contact_name, 'Jean-Luc Morel');
