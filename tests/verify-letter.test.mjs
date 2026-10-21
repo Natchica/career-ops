@@ -1,8 +1,13 @@
 // tests/verify-letter.test.mjs — warn-only letter checker (voice-dna.md §1 contract).
 // All fixtures are fictional (Jane Example, Example AG). Unit tests inject their own banned lists.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, splitBody } from '../verify-letter.mjs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { BUILTIN_BANNED, checkLetter, detectLang, isGermanSentence, loadBannedLists, parseVoiceDna, splitBody } from '../verify-letter.mjs';
 
 const P1 = 'Example AG builds compliance software for Swiss banks, and your posting for a Backend Engineer describes a team that runs its own services from design to production. Since February 2024 I have been lead developer on three production Rust services and reviewer on three more in a decentralized cloud platform. That scope is the reason I am applying to a team where backend systems are the product.';
 const P2 = 'The strongest evidence is a rewrite. I profiled two Java middleware components, replaced them with Rust, and measured a 75% gain in core performance. Alongside that work, five Spring services moved from Java 11 to Java 17 and shipped together in one coordinated release. A second engineer reviewed each step before merge. The suite of more than 1,250 unit tests kept 100% coverage through every change, which let reviewers merge with confidence.';
@@ -246,4 +251,177 @@ test('a clean French letter has no findings and Je/J\' count as sentence-initial
   assert.deepEqual(codes(wrapFr([FR1, FR2, noObjective, FR4]), FR_LETTER), ['missing-objective']);
   assert.deepEqual(codes(wrapFr([FR1, FR2, FR3, FR4.replace("d'un entretien", "d'un échange")]), FR_LETTER), ['missing-cta']);
   assert.deepEqual(codes(wrapFr([FR1.replace('Exemple SA développe', "Je me permets de souligner qu'Exemple SA développe"), FR2, FR3, FR4]), FR_LETTER), ['filler-opener']);
+});
+
+const VOICE_DNA_FIXTURE = `# VOICE DNA
+
+## 3. BANNED LIST
+
+If even ONE of these appears, the output fails.
+
+### 3A. Dead AI vocabulary
+
+These words are statistically overrepresented in LLM output.
+
+delve, realm, harness, unlock, tapestry, paradigm, cutting-edge, landscape (abstract), intricate/intricacies, showcasing, crucial, pivotal, surpass, meticulously, vibrant, unparalleled
+
+Also banned: "serves as," "stands as," "marks a," when used to avoid "is" or "has." Just say "is."
+
+### 3B. Dead phrases
+
+- "In today's [anything]..."
+- "It's important to note that..." / "It's worth noting..."
+- "In order to" (just say "to")
+- "Despite its [positive words], [subject] faces challenges..."
+
+### 3C. Dead transitions
+
+- "Furthermore" / "Additionally" / "Moreover"
+- "That said" / "That being said"
+- Any mechanical connector that reads like a college essay
+
+### 3D. Engagement bait
+
+- "Let that sink in" / "Read that again"
+`;
+
+test('parseVoiceDna reads the 3A words and the 3A/3B/3C quoted phrases', () => {
+  const lists = parseVoiceDna(VOICE_DNA_FIXTURE);
+  for (const word of ['delve', 'intricate', 'intricacies', 'landscape', 'cutting-edge', 'unparalleled']) {
+    assert.ok(lists.words.includes(word), `words should include ${word}`);
+  }
+  assert.ok(!lists.words.includes('abstract'));
+  for (const phrase of ['serves as', "In today's", "It's important to note that", "It's worth noting", 'In order to', 'Despite its', 'Furthermore', 'That being said']) {
+    assert.ok(lists.phrases.includes(phrase), `phrases should include ${phrase}`);
+  }
+  // Quoted words inside explanations are not phrases: just say "to", avoid "is" or "has".
+  for (const noise of ['to', 'is', 'has', 'Let that sink in']) {
+    assert.ok(!lists.phrases.includes(noise), `phrases must not include ${noise}`);
+  }
+});
+
+test('parseVoiceDna returns null when a section is missing or empty', () => {
+  assert.equal(parseVoiceDna('# nothing here'), null);
+  assert.equal(parseVoiceDna(VOICE_DNA_FIXTURE.replace('### 3C. Dead transitions', '### 3X. Other')), null);
+  assert.equal(parseVoiceDna(VOICE_DNA_FIXTURE.replace(/^delve, .*$/m, 'nothing')), null);
+});
+
+const sandboxes = [];
+after(() => { for (const d of sandboxes) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
+const sandbox = (voiceDna) => {
+  const dir = mkdtempSync(join(tmpdir(), 'verify-letter-'));
+  sandboxes.push(dir);
+  if (voiceDna !== undefined) writeFileSync(join(dir, 'voice-dna.md'), voiceDna);
+  return dir;
+};
+
+test('loadBannedLists falls back to the built-in list with a note', () => {
+  const missing = loadBannedLists(sandbox());
+  assert.equal(missing.lists, BUILTIN_BANNED);
+  assert.match(missing.note, /not found/);
+
+  const unparsable = loadBannedLists(sandbox('# nothing parsable'));
+  assert.equal(unparsable.lists, BUILTIN_BANNED);
+  assert.match(unparsable.note, /no parsable/);
+
+  const ok = loadBannedLists(sandbox(VOICE_DNA_FIXTURE));
+  assert.equal(ok.note, null);
+  assert.ok(ok.lists.words.includes('delve'));
+});
+
+const SCRIPT = join(dirname(dirname(fileURLToPath(import.meta.url))), 'verify-letter.mjs');
+const CLEAN_EN_EMAIL = wrap([P1, P3, P4]);
+
+// Every spawn gets its own data root: the developer's real voice-dna.md never feeds a test.
+const run = (args, root = sandbox(VOICE_DNA_FIXTURE)) => spawnSync(process.execPath, [SCRIPT, ...args], {
+  env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '' },
+  encoding: 'utf-8',
+});
+const file = (name, text) => { const dir = sandbox(); const path = join(dir, name); writeFileSync(path, text); return path; };
+
+test('a clean English email passes the unit check', () => {
+  assert.deepEqual(checkLetter(CLEAN_EN_EMAIL, { kind: 'email', lang: 'en', company: 'Example AG' }), []);
+});
+
+test('a text body prints findings and exits 0; kind defaults to email', () => {
+  const r = run([file('letter.txt', CLEAN_EN_LETTER), '--company', 'Example AG']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Letter check: 1 finding \(warn-only\)/);
+  assert.match(r.stdout, /⚠ word-count:/);
+});
+
+test('a clean body prints the passed line', () => {
+  const r = run([file('email.txt', CLEAN_EN_EMAIL), '--company', 'Example AG']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Letter check passed: no findings\./);
+});
+
+test('--kind letter switches the word budget', () => {
+  const r = run([file('letter.txt', CLEAN_EN_LETTER), '--kind', 'letter', '--company', 'Example AG']);
+  assert.match(r.stdout, /passed/);
+});
+
+const payloadFile = (letter) => file('payload.json', JSON.stringify({ candidate: { name: 'Jane Example' }, letter }));
+const PAYLOAD = { greeting: 'Dear [confirm name],', opening: P1, profile_intro: P2, problems_section: P3, closing: P4, language_closing: GERMAN_B1, company: 'Example AG' };
+
+test('a payload is checked as a letter from its five body fields in order', () => {
+  const r = run([payloadFile(PAYLOAD)]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Letter check: 1 finding \(warn-only\)/);
+  assert.match(r.stdout, /⚠ unconfirmed-marker:/);
+  assert.doesNotMatch(r.stdout, /word-count/);
+});
+
+test('--company overrides letter.company; without either the check is skipped with a note', () => {
+  // P1 names Example AG but not a posting, so only the company name can satisfy the check.
+  const unposted = { ...PAYLOAD, opening: P1.replace('your posting for a Backend Engineer describes', 'the Backend Engineer role describes') };
+  const other = run([payloadFile({ ...unposted, company: 'Other Corp' })]);
+  assert.match(other.stdout, /missing-company-reference/);
+  const overridden = run([payloadFile({ ...unposted, company: 'Other Corp' }), '--company', 'Example AG']);
+  assert.doesNotMatch(overridden.stdout, /missing-company-reference/);
+
+  const { company, ...noCompany } = PAYLOAD;
+  const skipped = run([payloadFile({ ...noCompany, opening: unposted.opening })]);
+  assert.doesNotMatch(skipped.stdout, /missing-company-reference/);
+  assert.match(skipped.stderr, /--company/);
+});
+
+test('usage errors and unreadable input exit 1', () => {
+  const body = file('body.txt', CLEAN_EN_EMAIL);
+  const cases = [
+    [[], /give the body file/],
+    [['/nonexistent/body.txt'], /file not found/],
+    [[file('bad.json', '{not json')], /not valid JSON/],
+    [[file('array.json', '[]')], /must hold a JSON object/],
+    [[body, '--kind'], /--kind/],
+    [[body, '--kind', 'memo'], /--kind must be letter or email/],
+    [[body, '--lang', 'de'], /--lang must be en or fr/],
+    [['--kindx', body], /unrecognized flag/],
+  ];
+  for (const [args, pattern] of cases) {
+    const r = run(args);
+    assert.equal(r.status, 1, `${args.join(' ')} should exit 1`);
+    assert.match(r.stderr, pattern, args.join(' '));
+  }
+});
+
+test('--help and -h print the same usage and exit 0', () => {
+  const long = run(['--help']);
+  const short = run(['-h']);
+  assert.equal(long.status, 0);
+  assert.match(long.stdout, /^Usage:/);
+  assert.equal(short.stdout, long.stdout);
+});
+
+test('voice-dna.md under the data root feeds banned-word; its absence prints a note', () => {
+  const zorblax = CLEAN_EN_EMAIL.replace('Rust is my first choice', 'Zorblax is my first choice');
+  const custom = run([file('z.txt', zorblax), '--company', 'Example AG'], sandbox(VOICE_DNA_FIXTURE.replace('delve,', 'delve, zorblax,')));
+  assert.equal(custom.status, 0, custom.stderr);
+  assert.match(custom.stdout, /banned-word/);
+  assert.doesNotMatch(custom.stderr, /built-in/);
+
+  const bare = run([file('z.txt', zorblax), '--company', 'Example AG'], sandbox());
+  assert.equal(bare.status, 0);
+  assert.match(bare.stderr, /built-in/);
+  assert.doesNotMatch(bare.stdout, /banned-word/);
 });
