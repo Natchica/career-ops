@@ -7,7 +7,7 @@ If `voice-dna.md` exists in the project root, it is a writing guardrail for gene
 **Two-tier scope (this is what keeps CVs accurate):**
 
 - **Tier 1 — anti-AI-slop guardrail** (voice-dna §3 Banned List, §4 Patterns to Avoid: banned words, dead phrases, no em-dashes, no negative parallelisms, formatting rules). These are HARD RULES. They apply to **all** generated text, including CV bullets and the Professional Summary.
-- **Tier 2 — conversational voice** (voice-dna §1-2: contractions, And/But sentence openers, hedging like "I think"/"maybe", parenthetical asides, direct "I"/"you"). Apply **only** to conversational candidate-facing prose: cover letters, LinkedIn outreach, follow-up emails. **Do NOT apply Tier 2 to CV/ATS text** (PDF bullets, Professional Summary) — those keep the formal, keyword-dense register in the ATS Rules below.
+- **Tier 2 — voice and register** (`voice-dna.md` §1-2 as written there; this module restates none of its rules). Apply **only** to candidate-facing prose: cover letters, application emails, LinkedIn outreach, follow-up emails, form answers. **Do NOT apply Tier 2 to CV/ATS text** (PDF bullets, Professional Summary) — those keep the formal, keyword-dense register in the ATS Rules below.
 
 **Accuracy always wins over style.** Facts from `cv.md` and `article-digest.md` are never overridden by voice-dna. Never drop, soften, or hedge a real metric to improve rhythm. Never invent detail to sound more human. Voice-dna shapes wording; it never changes content.
 
@@ -120,3 +120,58 @@ _If `voice-dna.md` exists, its §3 Banned List is the canonical, fuller version 
 - "Cut p95 latency from 2.1s to 380ms" beats "improved performance"
 - "Postgres + pgvector for retrieval over 12k docs" beats "designed scalable RAG architecture"
 - Name tools, projects, and customers when allowed
+
+---
+
+## Outbound text gate
+
+Every text the candidate will send or paste passes this gate before it is shown: letters, emails, LinkedIn and chat messages, form answers, the CV Professional Summary and bullets, the Cabinet Brief. The calling mode names the kind; the candidate runs nothing. The scanner `unslop.mjs` is offline and deterministic; its rules are data in `templates/unslop-rules.yml`. `voice-dna.md` §1-2 win over every rule here.
+
+### Loop
+
+1. Write the exact text to be sent to a scratch file: the Subject line when there is one, the salutation, the body, the valediction and the name. Leave out the attachment checklist, context lines, character counts and Open items. Use the path the mode names, otherwise `/tmp/outbound-{mode}-{slug}.txt`. Copy it to `{path}.before`.
+2. Scan it with the command the kind table gives. Exit `0`: no block finding. Exit `2`: at least one block finding. Exit `1`: a usage error; fix the command and scan again.
+3. Repair every block finding, and every warn finding a plain rewording solves, in `{path}`, under the repair contract below.
+4. Scan again. Run at most 2 repair passes in total.
+5. Run `node unslop.mjs --diff {path}.before {path}`. It must exit `0`. On `2`, put back each missing or altered fact from `{path}.before` and run it again. Never show a text whose diff fails.
+6. Show only the corrected text. Under **Open items**, list each warn finding left, each block finding left after 2 passes as "unresolved block finding", and each `[confirm ...]` marker. A text with a block finding is never shown as clean.
+
+**Languages.** The scanner reads English and French (`{lang}` is `en` or `fr`). For any other output language, write "Outbound text gate not run: {language}" under Open items and apply the reading checklist.
+
+**When the script cannot run** (no Node, the scratch write is refused): write "Outbound text gate not run: {reason}" under Open items, apply the reading checklist and the `voice-dna.md` §3 lists by reading, and never call the draft gated.
+
+### Kinds
+
+| Kind | Texts | Scan command | Rules not applied |
+| ---- | ----- | ------------ | ----------------- |
+| `letter` | Cover letter (`cover`) | `node verify-letter.mjs {path} --kind letter --company "{company}"` | none |
+| `email` | `hr_application`, `cold_application`, the Spontaneous email | `node verify-letter.mjs {path} --kind email --company "{company}"` | none |
+| `email` | `referral_request`, `process_stuck`, `confirmed_time_noshow` | `node unslop.mjs {path} --kind email --lang {lang}` | none |
+| `message` | `contacto` messages and greetings, `followup` drafts, `cabinet` contact and Check-in drafts | `node unslop.mjs {path} --kind message --lang {lang}` | 33, 33b, 33c |
+| `answer` | `apply` free-text answers, each scanned alone without its `###` and `>` wrapper | `node unslop.mjs {path} --kind answer --lang {lang}` | 15, 34 |
+| `cv` | `pdf` Professional Summary and experience bullets; the `cabinet` Brief | `node unslop.mjs {path} --kind cv --lang {lang}` | 12, 15, 29, 33, 33b, 33c, 34 |
+| `text` | Anything else | `node unslop.mjs {path} --kind text --lang {lang}` | none |
+
+`verify-letter.mjs` runs the same scan as `unslop.mjs` and adds the `voice-dna.md` §1 letter contract, so a letter-contract text is scanned once.
+
+### Repair contract
+
+- Make the smallest edit that clears the finding. Deleting the flagged phrase beats rewriting the sentence.
+- Copy every sentence that has no finding byte for byte.
+- Never add voice, personality, claims, numbers or names. Never drop or soften a number, a name, a date or a URL.
+- Leave quoted text, product and company names, code, the German sentence and literal uses of a flagged word as they are (a product called Bedrock is a name, not a metaphor), and list the finding under Open items.
+- Never resolve a `[confirm ...]` marker yourself.
+- When unsure that an edit keeps the meaning, make no edit and list the finding under Open items.
+
+### Reading checklist
+
+The scanner reports these under "Not scanned". Check them by reading after the last scan:
+
+- Rule of three (10): three adjectives or phrases in a row for rhythm. Not a finding in the `contacto` 3-sentence frame, which is prescribed.
+- Synonym cycling (11): one thing renamed across sentences; reuse the name.
+- Colon connector (14): a mid-sentence colon that sets up a reveal.
+- Inline-header list (16): a `Label:` that restates the line after it.
+- Title-case heading (17): use sentence case.
+- Feeling over mechanism (27), dense sentence (28), mannered prose (32): say what the thing does; split a sentence that carries three claims.
+- Verbless fragment (33c), except in kinds `cv` and `message`.
+- Texts scanned by `unslop.mjs` alone: no contractions, no exclamation marks, nothing from `voice-dna.md` §3 (`verify-letter.mjs` checks these for letter-contract texts).
