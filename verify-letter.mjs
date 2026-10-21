@@ -12,7 +12,10 @@
  */
 
 import { isMainModule } from './lib/is-main-module.mjs';
-import { validateFlags } from './lib/cli-flags.mjs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { flagValue, validateFlags } from './lib/cli-flags.mjs';
+import { getCareerOpsRoot } from './path-resolver.mjs';
 
 export const WORD_BUDGET = { letter: [250, 350], email: [150, 250] };
 
@@ -88,6 +91,59 @@ function namesCompany(paragraph, company, postingRe) {
 
 const MARKER = /\[confirm[^\]]*\]/gi;
 const EM_DASH = /\u2014|\s\u2013\s/g;
+
+/** The text of one voice-dna.md section 3 subsection, from its heading to the next heading or rule. */
+function sectionOf(md, letter) {
+  const start = md.search(new RegExp(`^### 3${letter}\\.`, 'm'));
+  if (start === -1) return null;
+  const rest = md.slice(start).replace(/^[^\n]*\n/, '');
+  const end = rest.search(/^(?:### |---\s*$)/m);
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
+const quoted = (text) => [...text.replace(/\([^)]*\)/g, '').matchAll(/"([^"]+)"/g)]
+  .map((m) => m[1].split('[')[0].replace(/[\s,.\u2026]+$/, '').trim())
+  .filter((p) => p.length >= 2);
+
+/**
+ * Read the banned words (3A list line) and banned phrases (quoted text in 3A "Also banned",
+ * 3B and 3C) out of voice-dna.md. Null when a section is missing or yields nothing.
+ * @param {string} md
+ * @returns {{words: string[], phrases: string[]}|null}
+ */
+export function parseVoiceDna(md) {
+  const [a, b, c] = ['A', 'B', 'C'].map((letter) => sectionOf(String(md ?? ''), letter));
+  if (a == null || b == null || c == null) return null;
+
+  const commaCount = (line) => (line.match(/,/g) ?? []).length;
+  const wordsLine = a.split('\n').reduce((best, line) => (commaCount(line) > commaCount(best) ? line : best), '');
+  const words = commaCount(wordsLine) < 10 ? [] : wordsLine
+    .split(/[,/]/)
+    .map((w) => w.replace(/\([^)]*\)/g, '').trim())
+    .filter(Boolean);
+
+  const alsoBanned = a.split('\n').find((line) => /^Also banned/i.test(line)) ?? '';
+  const phrases = [...new Set([...quoted(alsoBanned.split(/ when /i)[0]), ...quoted(b), ...quoted(c)])];
+  if (words.length === 0 || phrases.length === 0) return null;
+  return { words, phrases };
+}
+
+/**
+ * The banned lists to check against: voice-dna.md under the data root when it parses, otherwise the
+ * built-in subset, with a one-line note saying why.
+ * @returns {{lists: {words: string[], phrases: string[]}, note: string|null}}
+ */
+export function loadBannedLists(root = getCareerOpsRoot()) {
+  let md;
+  try {
+    md = readFileSync(join(root, 'voice-dna.md'), 'utf-8');
+  } catch {
+    return { lists: BUILTIN_BANNED, note: 'voice-dna.md not found; using the built-in banned list.' };
+  }
+  const lists = parseVoiceDna(md);
+  if (!lists) return { lists: BUILTIN_BANNED, note: 'voice-dna.md has no parsable section 3; using the built-in banned list.' };
+  return { lists, note: null };
+}
 
 const FR_MARK = /(?<![\p{L}-])(?:le|la|les|je|j['’]|vous|nous|des|une|est|pour|avec)(?![\p{L}-])/giu;
 const EN_MARK = /(?<![\p{L}-])(?:the|and|i|you|we|of|to|is|with|for)(?![\p{L}-])/giu;
@@ -231,10 +287,70 @@ Options:
 const KNOWN_FLAGS = ['--kind', '--lang', '--company', '--help', '-h'];
 const VALUE_FLAGS = ['--kind', '--lang', '--company'];
 
+/**
+ * The letter text a cover payload renders, in reading order: greeting, opening, profile_intro,
+ * problems_section, closing, language_closing. The greeting must end with a comma, the shape
+ * cover.md writes, for splitBody to recognise it as a salutation.
+ */
+export function payloadToText(payload) {
+  const letter = payload?.letter ?? {};
+  return [letter.greeting, letter.opening, letter.profile_intro, letter.problems_section, letter.closing, letter.language_closing]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join('\n\n');
+}
+
+function fail(message) {
+  console.error(`Error: ${message}`);
+  process.exit(1);
+}
+
 export function runCli(args) {
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
-  console.error('Error: the verify-letter CLI is not wired yet.');
-  process.exit(1);
+
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    if (VALUE_FLAGS.includes(args[i])) { i++; continue; }
+    if (!args[i].startsWith('-')) positionals.push(args[i]);
+  }
+  const [input] = positionals;
+  if (!input) fail('give the body file: node verify-letter.mjs <body.txt | payload.json> [--kind letter|email] [--lang en|fr] [--company <name>]');
+  if (!existsSync(input)) fail(`file not found: ${input}`);
+
+  let text;
+  try {
+    text = readFileSync(input, 'utf-8');
+  } catch (e) {
+    fail(`cannot read ${input}: ${e.message}`);
+  }
+
+  // A .json input is a cover payload (a letter); anything else is a plain-text body (an email by default).
+  let payload = null;
+  if (input.toLowerCase().endsWith('.json')) {
+    try {
+      payload = JSON.parse(text);
+    } catch (e) {
+      fail(`${input} is not valid JSON: ${e.message}`);
+    }
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) fail(`${input} must hold a JSON object`);
+    text = payloadToText(payload);
+  }
+
+  const kind = flagValue(args, '--kind') ?? (payload ? 'letter' : 'email');
+  if (!Object.hasOwn(WORD_BUDGET, kind)) fail('--kind must be letter or email');
+  const lang = flagValue(args, '--lang');
+  if (lang !== undefined && !Object.hasOwn(RULES, lang)) fail('--lang must be en or fr');
+  const company = flagValue(args, '--company') ?? payload?.letter?.company;
+  if (!company) console.error('Note: no --company and no letter.company; the paragraph 1 company check was skipped.');
+  const { lists, note } = loadBannedLists();
+  if (note) console.error(note);
+
+  const findings = checkLetter(text, { kind, lang, company, bannedLists: lists });
+  if (findings.length === 0) {
+    console.log('Letter check passed: no findings.');
+    return;
+  }
+  console.log(`Letter check: ${findings.length} finding${findings.length === 1 ? '' : 's'} (warn-only)`);
+  for (const f of findings) console.log(`  ⚠ ${f.code}: ${f.message}`);
 }
 
 if (isMainModule(import.meta.url)) runCli(process.argv.slice(2));
