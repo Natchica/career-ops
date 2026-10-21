@@ -1,6 +1,6 @@
 # Mode: followup -- Follow-up Cadence Tracker
 
-> **Read `voice-dna.md` (if present) and apply it to every generated email/LinkedIn draft.** This mode is standalone — it does NOT load `_shared.md`, so read `voice-dna.md` directly. Follow-up drafts are conversational, so apply the full guardrail: banned words/phrases/patterns, no em-dashes, no negative parallelisms (§3-4) AND conversational voice — contractions, varied rhythm, direct "I"/"you" (§1-2). Never drop or soften a real metric from `cv.md` for style.
+> **Read `voice-dna.md` (if present) and apply it to every generated email/LinkedIn draft.** This mode is standalone — it does NOT load `_shared.md`, so read `voice-dna.md` directly. Follow-up drafts are conversational, so apply the full guardrail: banned words/phrases/patterns, no em-dashes, no negative parallelisms (§3-4) AND the voice rules of §1-2 as written there. Never drop or soften a real metric from `cv.md` for style.
 
 ## Purpose
 
@@ -157,6 +157,10 @@ Do NOT generate another follow-up. Instead suggest:
 Before drafting, check the company's card. Skip this lookup entirely when the tracker's company field is `?` (the unknown-employer marker — there is no meaningful card to fetch). Otherwise run `node company-history.mjs --company <company>`, passing the company name as its own single, quoted argument — never splice it into a longer shell string, since company names can legitimately contain quotes, `$`, backticks, or `;`. If `responsiveness.label` is `silent-on-you`, set expectations rather than discouraging the follow-up: many processes are genuinely just slow, so mention this plainly and suggest capping further time investment in this company if it stays silent after this attempt. The decision to send — and how many more times — stays the user's; never skip or downgrade a follow-up because of this label. Follow-up compliance is never punished.
 
 ## Step 4 — Present Drafts
+
+Read `modes/_writing.md` → Outbound text gate; this mode does not load it otherwise.
+
+Run the Outbound text gate (`modes/_writing.md`), kind `message`, on each draft (its Subject line and text) before you show it. The block below shows the corrected text; the findings the gate left go on an **Open items** line under it.
 
 For each draft, show:
 
