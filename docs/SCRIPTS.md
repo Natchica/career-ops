@@ -376,7 +376,7 @@ Findings: `curriculum-vitae` (the heading), `missing-address`, `missing-national
 
 ## verify-letter
 
-Warn-only check of a cover letter or an application email against the letter contract in `voice-dna.md` §1 (jobup.ch cover-letter guidance). No network and no model. It prints each finding and exits `0`; the fact gate `verify-cv-facts.mjs` stays the only hard gate.
+Check of a cover letter or an application email against the letter contract in `voice-dna.md` §1 (jobup.ch cover-letter guidance), plus the `unslop.mjs` scan, merged by cause. No network and no model. It prints each finding; the fact gate `verify-cv-facts.mjs` stays the only fact check.
 
 ```bash
 node verify-letter.mjs /tmp/email-body-acme.txt --company "Acme AG"                  # a plain-text body, checked as an email
@@ -387,11 +387,32 @@ node verify-letter.mjs body.txt --lang fr --company "Exemple SA"                
 
 A `.json` input is a cover payload (`letter.greeting`, `opening`, `profile_intro`, `problems_section`, `closing`, `language_closing`, joined in that order); any other file is a plain-text body. Salutation, `Subject:`/`Objet:`/`Annexes:` lines, the valediction with everything after it, and German sentences (the one B1 line) are left out of the language rules and the word count.
 
-Findings: `empty-body`, `word-count` (letter 250-350, email 150-250), `conditional` (English `would`, `could`, `might`, `should`; French `-rais` forms and `-er` imperfect look-alikes excluded), `negative-formulation`, `sentence-initial-i` (more than one third of sentences open with `I`/`Je`/`J'`), `stock-phrase`, `filler-opener`, `banned-word` (from `voice-dna.md` §3A to §3C), `missing-company-reference` (paragraph 1 names neither the company nor the posting; skipped with a note when no company is known), `missing-objective`, `missing-cta`, `unconfirmed-marker` (`[confirm ...]`), `em-dash`, `exclamation`, `contraction` (English only).
+Findings: `empty-body`, `word-count` (letter 250-350, email 150-250), `conditional` (English `would`, `could`, `might`, `should`; French `-rais` forms and `-er` imperfect look-alikes excluded), `negative-formulation`, `sentence-initial-i` (more than one third of sentences open with `I`/`Je`/`J'`), `stock-phrase`, `filler-opener`, `banned-word` (from `voice-dna.md` §3A to §3C), `missing-company-reference` (paragraph 1 names neither the company nor the posting; skipped with a note when no company is known), `missing-objective`, `missing-cta`, `unconfirmed-marker` (`[confirm ...]`), `em-dash`, `exclamation`, `contraction` (English only), and `unslop-{id}` for each `unslop.mjs` rule that fires and is not already covered by one of the above (an em dash, a banned word, a stock phrase and a filler opener are reported once). `banned-word`, `contraction`, `em-dash` and `exclamation` are block findings; the rest warn.
 
 `voice-dna.md` is read from the data root; when it is absent or has no parsable §3, a built-in subset is used and one line on stderr says so.
 
-**Exit codes:** `0` with or without findings; `1` on a usage error or unreadable input.
+**Exit codes:** `0` no block finding (warnings may exist); `2` a block finding; `1` on a usage error or unreadable input.
+
+---
+
+## unslop
+
+The Outbound text gate scanner. Every text career-ops drafts for the candidate to send passes it before it is shown (`modes/_writing.md` → Outbound text gate); the modes run it, the candidate does not need to. It checks a text against `templates/unslop-rules.yml`: the 30 numbered rules of cursor/plugins unslop (ids 3-33) plus humanizer patterns (ids 34-40). No network and no model. `voice-dna.md` §1-2 win over every rule: each rule's `must_not_flag` says what it leaves alone, and a test pins each case.
+
+```bash
+node unslop.mjs /tmp/outbound-email-acme.txt --kind email --lang en          # scan an email
+node unslop.mjs /tmp/cv-text-acme.txt --kind cv                              # a CV summary and bullets (language detected)
+node unslop.mjs /tmp/outbound-contacto-acme.txt --kind message --lang fr     # a LinkedIn message in French
+node unslop.mjs --diff /tmp/draft.txt.before /tmp/draft.txt                  # did a repair keep every fact?
+```
+
+Kinds: `letter`, `email`, `message`, `answer`, `cv`, `text` (default). A kind exempts rules that do not fit it: `message` skips 33, 33b, 33c (arrows and fragments); `answer` skips 15 and 34 (bold, bullets); `cv` skips 12, 15, 29, 33, 33b, 33c, 34. Languages: English and French; another language is reported as not scanned.
+
+Output: each finding with its rule id, name and the matched text (`✖` block, `⚠` warn), then `Not scanned (reading check): ...` for the rules that need a reader (10, 11, 14, 16, 17, 27, 28, 32, 33c; the gate carries them as a checklist) and `Not scanned for {lang}: ...` for rules with no list in that language.
+
+`--diff <before> <after>` extracts currency, percentages, dates, times, ranges, counts with units, numbers, URLs, emails and names from the first text and reports each one missing or altered in the second (number words and digits are the same fact; a fact only in the second text is not a finding).
+
+**Exit codes:** `0` no block finding; `2` a block finding or a failed `--diff`; `1` on a usage error, unreadable input or an invalid rules file.
 
 ---
 
