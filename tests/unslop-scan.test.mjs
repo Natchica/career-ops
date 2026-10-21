@@ -286,6 +286,39 @@ test('24: fires on stacked hedges, must not flag one may', () => {
   assert.equal(has('It may improve latency.', '24', { lang: 'en' }), false);
 });
 
+test('7b: fires on two tier 2 words in one paragraph', () => {
+  const { findings } = scanText('A robust and seamless pipeline ships weekly.', { lang: 'en' });
+  const hit = findings.find((f) => f.id === '7b');
+  assert.ok(hit, '7b should fire');
+  assert.deepEqual(hit.hits.map((h) => h.toLowerCase()), ['robust', 'seamless']);
+});
+
+test('7b: must not flag one word per paragraph or a capitalised name', () => {
+  assert.equal(has('A robust pipeline ships.\n\nA seamless rollout followed.', '7b', { lang: 'en' }), false);
+  assert.equal(has('We work with Robust Inc. and a seamless setup.', '7b', { lang: 'en' }), false);
+  assert.equal(has('A robust pipeline ships weekly.', '7b', { lang: 'en' }), false);
+});
+
+test('23 and 31: fire with a repair hint', () => {
+  const hint = (text, id, lang = 'en') => scanText(text, { lang }).findings.find((f) => f.id === id)?.hint;
+  assert.equal(hint('We did it in order to ship.', '23'), 'use "to"');
+  assert.equal(hint('It’s important to note that it works.', '23'), 'delete it');
+  assert.equal(hint('Il est important de noter que cela marche.', '23', 'fr'), 'delete it');
+  assert.equal(hint('Cela marche du fait que le test passe.', '23', 'fr'), 'use "parce que"');
+  assert.equal(hint('We utilize the cache.', '31'), 'use "use"');
+  assert.equal(hint('We leverage the cache.', '31'), 'use "use"');
+  assert.equal(hint('Numerous users joined.', '31'), 'use "many"');
+  assert.equal(hint('Retry in the event that it fails.', '31'), 'use "if"');
+});
+
+test('23 and 31: must not flag French connectors, a leverage ratio or a company name', () => {
+  for (const text of ['Je livre afin de réduire le risque.', 'Cela marche parce que le test passe.', 'Dans le cadre de ce projet, je livre.', 'Au sein de cette équipe, je livre.']) {
+    assert.equal(has(text, '23', { lang: 'fr' }), false, text);
+  }
+  assert.equal(has('The leverage ratio is high.', '31', { lang: 'en' }), false);
+  assert.equal(has('We joined Leverage Labs last year.', '31', { lang: 'en' }), false);
+});
+
 test('scanText is exported with ids()', () => {
   assert.deepEqual(ids('Plain text.'), []);
 });
