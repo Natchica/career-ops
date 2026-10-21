@@ -58,6 +58,10 @@ _Avoid_: discover (the ATS board resolver `discover-ats.mjs`, which consumes nam
 A Direct application sent to a Prospect with no Lead behind it: no posting exists, so the CV is framed from the profile's no-JD row (`modes/_profile.md`, "Your Adaptive Framing") instead of being tailored to a JD.
 _Avoid_: cold application (collides with cold outreach in `contacto`), unsolicited, speculative; keep "candidature spontanée" and "Initiativbewerbung" as market vocabulary only
 
+**Candiboost send**:
+A Spontaneous application that the Candiboost campaign sent from the candidate's own Gmail with the campaign's fixed template, to a named person it found at the company. It is read back from the Sent folder by `candiboost-sync.mjs` into `data/candiboost.tsv`, a tracker row and a contact; it is never written by the `spontaneous` mode. Its personalised mail is its first follow-up, drafted through the full spontaneous flow and sent as a reply in the same thread.
+_Avoid_: blast, campaign mail (the template, not the send), import (the sync reads mail, not a file)
+
 **Brief**:
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
@@ -89,6 +93,7 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - A **Prospect** is one brand or group with its in-zone sites listed; legal entities are aliases, never separate Prospects
 - A **Spontaneous application** targets a **Prospect** directly; it has no **Lead**, its **Via** is `—` (Direct), and it enters the tracker only once it is actually sent
 - A **Spontaneous application** starts from a **Prospect** of **Tier** 1 or 2, one per daily run, chosen by the candidate from the best untouched ones
+- A **Candiboost send** is a **Spontaneous application** whose first mail was not written here: it has a tracker row and a contact from the day it is synced, and its company is excluded from the daily pick of first mails; its personalised mail is a follow-up, chosen 1-2 per day from the sends 7 days old or older, **Tier** 1 first
 - A **Brief** is versioned; the registry records which version each **Cabinet** holds
 
 ## Example dialogue
