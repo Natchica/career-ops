@@ -319,6 +319,32 @@ test('23 and 31: must not flag French connectors, a leverage ratio or a company 
   assert.equal(has('We joined Leverage Labs last year.', '31', { lang: 'en' }), false);
 });
 
+test('29: fires on an agentless passive', () => {
+  for (const text of ['The queries are validated before release.', 'The release was shipped last week.', 'The tests were run nightly.']) {
+    assert.equal(has(text, '29', { lang: 'en' }), true, text);
+  }
+});
+
+test('29: must not flag adjectival participles, a by-actor, or the cv kind', () => {
+  for (const text of ['My CV is attached.', 'I am based in Sentheim.', 'I am interested in the role.', 'I am open to backend roles.', 'Each step was reviewed by a second engineer.', 'I am a French citizen.']) {
+    assert.equal(has(text, '29', { lang: 'en' }), false, text);
+  }
+  assert.equal(has('The queries are validated before release.', '29', { lang: 'en', kind: 'cv' }), false);
+});
+
+test('30: fires on a high density of adverbs', () => {
+  const text = 'We quickly shipped the service and it significantly improved latency for users who really need it, so the team moved on to the next task and kept the release cycle short and the tests green for every change.';
+  const hit = scanText(text, { lang: 'en' }).findings.find((f) => f.id === '30');
+  assert.ok(hit, '30 should fire');
+  assert.deepEqual(hit.hits.map((h) => h.toLowerCase()), ['quickly', 'significantly', 'really']);
+});
+
+test('30: must not flag words that only look like adverbs or a low density', () => {
+  assert.equal(has('We only ship early on a daily basis, the family team likes July, and a likely release lands soon after the review of the main change and the release notes.', '30', { lang: 'en' }), false);
+  const long = `We quickly ship. ${'Release notes cover the service and the tests. '.repeat(30)}It significantly improves.`;
+  assert.equal(has(long, '30', { lang: 'en' }), false);
+});
+
 test('scanText is exported with ids()', () => {
   assert.deepEqual(ids('Plain text.'), []);
 });
