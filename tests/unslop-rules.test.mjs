@@ -78,6 +78,7 @@ test('loadUnslopRules names the rule and field it rejects', () => {
     ['an unknown language', (d) => { d.rules[0].lang = ['de']; }, /lang/],
     ['no must_not_flag', (d) => { delete d.rules[0].must_not_flag; }, /must_not_flag/],
     ['an unknown scope', (d) => { d.rules[0].scope = 'page'; }, /scope must be text or prose/],
+    ['a pattern that does not compile', (d) => { d.rules[0].patterns = { all: ['('] }; }, /does not compile/],
   ];
   for (const [label, mutate, pattern] of cases) {
     assert.throws(loading(mutate), pattern, label);
