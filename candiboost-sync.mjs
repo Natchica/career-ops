@@ -27,6 +27,8 @@ import { readRegistry, registryPath } from './radar/registry.mjs';
 import { releaseReportNumbers, reserveReportNumbers } from './reserve-report-num.mjs';
 import { appendCandidate } from './paste-reply.mjs';
 import { slugifyCompany } from './lib/tracker-addition.mjs';
+import { localToday } from './lib/local-today.mjs';
+import { findBlacklistEntry, loadBlacklist } from './scan.mjs';
 import {
   REGISTRY_COLUMNS, additionTsv, buildProspectIndex, contactLine, parseThread, planSync, readTable, updateTable,
 } from './lib/candiboost.mjs';
@@ -396,12 +398,173 @@ async function runSync(args, root) {
   if (out.mergeFailed?.length || out.noteFailed?.length) process.exit(CLI_EXIT.USAGE);
 }
 
+const DAY_MS = 86_400_000;
+export const FOLLOWUP_AFTER_DAYS = 7;
+
+const dayNumber = (iso) => {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return Math.floor(Date.UTC(y, m - 1, d) / DAY_MS);
+};
+const daysBetween = (from, to) => dayNumber(to) - dayNumber(from);
+
+/** Why a registry row cannot be followed up yet, or null when it is due. */
+export function followupReason(row, { today, trackerStatusOf }) {
+  if (row.status !== 'sent') return `status is ${row.status}`;
+  if (row.followup) return `follow-up already recorded on ${row.followup}`;
+  const days = daysBetween(row.sent_at, today);
+  if (days < FOLLOWUP_AFTER_DAYS) return `sent ${days} day(s) ago, due after ${FOLLOWUP_AFTER_DAYS}`;
+  const tracked = trackerStatusOf(row);
+  if (tracked !== 'Applied') return `tracker status is ${tracked || 'missing'}`;
+  return null;
+}
+
+const TIER_ORDER = { 1: 1, 2: 2, 3: 3 };
+const tierRank = (tier) => TIER_ORDER[tier] ?? 4;
+
+function pickFields(row, { today, tierOf }) {
+  return {
+    thread_id: row.thread_id,
+    domain: row.domain,
+    company: row.company,
+    radar_key: row.radar_key,
+    tier: tierOf(row) || null,
+    sent_at: row.sent_at,
+    days: daysBetween(row.sent_at, today),
+    tracker: /^\d+$/.test(row.tracker) ? Number(row.tracker) : row.tracker,
+    contact_name: row.contact_name,
+    civility: row.civility,
+    gmail_url: `https://mail.google.com/mail/u/0/#all/${row.thread_id}`,
+  };
+}
+
+/**
+ * Rank the sends due their personalised follow-up: tier 1 before 2 before 3
+ * before unmatched, older first, then domain. Tier `out` and blacklisted sends
+ * are left out and counted. `count` is clamped to 1-2 (default 2).
+ */
+export function rankFollowups(rows, { today, tierOf, trackerStatusOf, isBlacklisted, count = 2 }) {
+  const limit = Math.min(2, Math.max(1, Number.isInteger(count) ? count : 2));
+  const excluded = { out: 0, blacklisted: 0 };
+  const eligible = [];
+  for (const row of rows) {
+    if (followupReason(row, { today, trackerStatusOf })) continue;
+    if (tierOf(row) === 'out') { excluded.out++; continue; }
+    if (isBlacklisted(row)) { excluded.blacklisted++; continue; }
+    eligible.push(row);
+  }
+  const cmp = (a, b) => tierRank(tierOf(a)) - tierRank(tierOf(b))
+    || (a.sent_at < b.sent_at ? -1 : a.sent_at > b.sent_at ? 1 : 0)
+    || (a.domain < b.domain ? -1 : a.domain > b.domain ? 1 : 0)
+    || (a.thread_id < b.thread_id ? -1 : a.thread_id > b.thread_id ? 1 : 0);
+  eligible.sort(cmp);
+  return {
+    picks: eligible.slice(0, limit).map((row) => pickFields(row, { today, tierOf })),
+    excluded,
+    eligible: eligible.length,
+  };
+}
+
+export class MarkError extends Error {
+  constructor(message, exit) {
+    super(message);
+    this.name = 'MarkError';
+    this.exit = exit;
+  }
+}
+
+function renderPick(out) {
+  const lines = [`Candiboost follow-ups: ${out.eligible} due; excluded: ${out.excluded.out} tier out, ${out.excluded.blacklisted} blacklisted`];
+  out.picks.forEach((p, i) => {
+    const who = [p.civility, p.contact_name].filter(Boolean).join(' ') || 'no contact name';
+    lines.push(`  ${i + 1}. ${p.company} (${p.domain}) — tier ${p.tier ?? 'none'} · sent ${p.sent_at} (${p.days}d ago) · tracker #${p.tracker} · ${who}`);
+    lines.push(`     ${p.gmail_url}`);
+  });
+  if (out.picks.length === 0) lines.push('  nothing due');
+  return lines.join('\n');
+}
+
+function renderDomain(out) {
+  const lines = [`Candiboost sends to ${out.domain}: ${out.rows.length}`];
+  for (const r of out.rows) {
+    lines.push(`  ${r.thread_id} · ${r.company} · sent ${r.sent_at} · ${r.eligible ? 'due' : `not due: ${r.reason}`}`);
+    lines.push(`     ${r.gmail_url}`);
+  }
+  return lines.join('\n');
+}
+
+function runPick(args, root) {
+  const rawCount = flagValue(args, '--count');
+  let count = 2;
+  if (rawCount !== undefined) {
+    count = Number.parseInt(rawCount, 10);
+    if (!Number.isInteger(count) || count < 1) fail(`--count takes 1 or 2, got "${rawCount}"`);
+    count = Math.min(count, 2);
+  }
+  const registry = readTable(join(root, 'data', 'candiboost.tsv'), REGISTRY_SPEC);
+  if (registry.missing) fail('no registry: run candiboost-sync.mjs sync first');
+  const radarRows = new Map(readRegistry(registryPath(root)).rows.map((r) => [r.key, r]));
+  const trackerRows = readTrackerRows(root);
+  const blacklist = loadBlacklist(join(root, 'data', 'blacklist.md'));
+  const today = localToday();
+  const ctx = {
+    today,
+    tierOf: (row) => radarRows.get(row.radar_key)?.tier ?? '',
+    trackerStatusOf: (row) => trackerRows.find((t) => String(t.num) === row.tracker)?.status ?? '',
+    isBlacklisted: (row) => [row.company, radarRows.get(row.radar_key)?.name].filter(Boolean).some((n) => findBlacklistEntry(blacklist, n, '') !== null),
+  };
+  const domain = flagValue(args, '--domain');
+  let out;
+  if (domain !== undefined) {
+    const wanted = domain.toLowerCase();
+    const rows = registry.rows.filter((r) => r.domain === wanted)
+      .sort((a, b) => (a.sent_at < b.sent_at ? -1 : a.sent_at > b.sent_at ? 1 : a.thread_id < b.thread_id ? -1 : 1))
+      .map((row) => {
+        const reason = followupReason(row, ctx)
+          ?? (ctx.tierOf(row) === 'out' ? 'Radar tier is out' : ctx.isBlacklisted(row) ? 'company is blacklisted' : null);
+        return { ...pickFields(row, ctx), eligible: reason === null, reason };
+      });
+    out = { domain: wanted, rows };
+  } else {
+    out = rankFollowups(registry.rows, { ...ctx, count });
+  }
+  console.log(args.includes('--summary') ? (domain !== undefined ? renderDomain(out) : renderPick(out)) : JSON.stringify(out, null, 2));
+}
+
+async function runMark(args, root) {
+  const [, threadId, state] = positionals(args);
+  if (!threadId || state !== 'followed') fail('mark takes a thread id and the state followed: mark <thread_id> followed');
+  const rawDate = flagValue(args, '--date');
+  const date = rawDate ?? localToday();
+  const stamp = new Date(`${date}T00:00:00Z`).getTime();
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(stamp) && new Date(stamp).toISOString().startsWith(date);
+  if (!valid) fail(`--date takes a real YYYY-MM-DD date, got "${date}"`);
+  const path = join(root, 'data', 'candiboost.tsv');
+  if (readTable(path, REGISTRY_SPEC).missing) fail('no registry: run candiboost-sync.mjs sync first');
+  const receipt = await updateTable(path, REGISTRY_SPEC, (fresh) => {
+    const target = fresh.rows.find((r) => r.thread_id === threadId);
+    if (!target) throw new MarkError(`no Candiboost send with thread id "${threadId}"`, CLI_EXIT.NOT_FOUND);
+    if (target.followup && target.followup !== date) {
+      throw new MarkError(`"${threadId}" already followed up on ${target.followup}`, CLI_EXIT.AMBIGUOUS);
+    }
+    const rows = fresh.rows.map((r) => (r === target ? { ...r, followup: date } : r));
+    return { rows, result: { thread_id: threadId, followup: date } };
+  });
+  console.log(JSON.stringify(receipt, null, 2));
+}
+
 async function main(args) {
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
   const root = getCareerOpsRoot();
   const [command] = positionals(args);
-  if (command === 'sync') await runSync(args, root);
-  else fail('first argument must be sync, pick or mark (see --help)');
+  try {
+    if (command === 'sync') await runSync(args, root);
+    else if (command === 'pick') runPick(args, root);
+    else if (command === 'mark') await runMark(args, root);
+    else fail('first argument must be sync, pick or mark (see --help)');
+  } catch (e) {
+    if (e instanceof MarkError) fail(e.message, e.exit);
+    throw e;
+  }
 }
 
 if (isMainModule(import.meta.url)) {
