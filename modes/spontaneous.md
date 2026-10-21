@@ -43,6 +43,7 @@ If `next` reports `untiered` or `staleTiers` above 0, tell the candidate to run 
     - `node merge-tracker.mjs`, then `node reserve-report-num.mjs --release {N}`.
     - `node spontaneous-pick.mjs mark "<key>" sent --tracker {N}`.
     - Offer `followup` cadence as usual.
+    - If `next` flagged the pick `candiboostPending`, tell the candidate to delete the row `{candiboostRow}` in Candiboost so it receives one mail; never click it yourself.
 
 ## Rules
 
