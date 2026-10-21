@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
-  PENDING_COLUMNS, REGISTRY_COLUMNS, additionTsv, buildProspectIndex, contactLine, findTrackedRow, parseTable,
+  PENDING_COLUMNS, REGISTRY_COLUMNS, additionTsv, buildProspectIndex, contactLine, extractCompany, findTrackedRow, parseTable,
   parseThread, planSync, readTable, serializeTable, updateTable,
 } from '../lib/candiboost.mjs';
 
@@ -20,6 +20,17 @@ test('a no-dot address takes the greeting last name', () => {
   assert.equal(p.record.contact_name, 'Weber');
   assert.equal(p.record.civility, 'M.');
   assert.equal(p.record.domain, 'acme-bank.com');
+});
+
+test('the company sentence reads "de X" and the elided "d’X", and drops an article or a bare www', () => {
+  const sentence = (tail) => `Je me permets de vous adresser ma candidature spontanée pour un poste de Software Engineer Backend au sein ${tail}.\nJ’ai à cœur de m’investir.`;
+  assert.equal(extractCompany(sentence('de BKB')), 'BKB');
+  assert.equal(extractCompany(sentence('d’OPTRAVIS')), 'OPTRAVIS');
+  assert.equal(extractCompany(sentence("d'AXA")), 'AXA');
+  assert.equal(extractCompany(sentence('de l’UNIBAS')), 'UNIBAS');
+  assert.equal(extractCompany(sentence('de la POSTE')), 'POSTE');
+  assert.equal(extractCompany(sentence('de WWW')), '');
+  assert.equal(extractCompany('Bonjour M. Huber,\nVous trouverez mon CV.'), '');
 });
 
 test('a hyphenated first name keeps both capitals and a missing company sentence is empty', () => {
