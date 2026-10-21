@@ -32,6 +32,28 @@ const EN = {
   filler: /^(?:I am (?:writing|pleased|excited|delighted|thrilled|happy|glad)\b|Please find\b|Allow me\b|My name is\b|I hope this\b)/i,
 };
 
+// French conditional: an -er verb's -ais/-ait/-ions/-iez/-aient on the bare infinitive, or an
+// irregular / -re / -ir stem taken whole (the lookbehind anchors it, so "tirais" cannot match
+// the stem "ir"). A generic "-rais" suffix would catch every imperfect of a verb whose stem ends in r.
+const FR_COND_STEMS = ['aur', 'saur', 'pourr', 'devr', 'voudr', 'faudr', 'vaudr', 'verr', 'enverr', 'recevr',
+  'viendr', 'tiendr', 'conviendr', 'deviendr', 'obtiendr', 'prendr', 'apprendr', 'comprendr', 'mettr', 'permettr',
+  'rendr', 'attendr', 'plair', 'ir', 'dir', 'écrir', 'construir', 'conduir', 'produir', 'choisir', 'réussir',
+  'finir', 'offrir', 'ouvrir', 'partir', 'servir', 'sortir'];
+const FR = {
+  initial: /^(?:je(?!\p{L})|j['’])/iu,
+  filler: /^(?:je me permets|je vous écris|par la présente|c['’]est avec|suite à votre annonce|permettez-moi|je m['’]appelle)(?!\p{L})/iu,
+  objective: /(?<!\p{L})(?:souhaite|vise|compte|vais|veux|ambitionne)(?!\p{L})/iu,
+  cta: /(?<!\p{L})entretiens?(?!\p{L})/iu,
+  posting: /(?<!\p{L})(?:votre|l['’])\s*(?:annonce|offre d['’]emploi)(?!\p{L})/iu,
+  negative: /(?<!\p{L})(?:jamais|aucune?)(?!\p{L})|(?<!\p{L})(?:ne\s+|n['’])(?:[\p{L}'’]+\s+){0,3}(?:pas|plus|rien|guère)(?!\p{L})/giu,
+  conditional: new RegExp(String.raw`(?<!\p{L})(?:\p{L}+er|${FR_COND_STEMS.join('|')})(?:ais|ait|ions|iez|aient)(?!\p{L})`, 'giu'),
+};
+const NEVER = /(?!)/gu; // French has no contraction check: elision (j'ai, l'équipe) is ordinary writing
+const RULES = {
+  en: EN,
+  fr: { ...EN, ...FR, contraction: NEVER },
+};
+
 // jobup's stock phrases ("Je suis dynamique et très motivé"), applied in both languages.
 export const STOCK = ['dynamic', 'motivated', 'team player', 'I am writing to', 'pleased to', 'dynamique', 'motivé', 'motivée', 'je vous écris', "c'est avec plaisir que"];
 // Fallback for a checkout without voice-dna.md: a subset of its section 3 lists.
@@ -66,6 +88,15 @@ function namesCompany(paragraph, company, postingRe) {
 
 const MARKER = /\[confirm[^\]]*\]/gi;
 const EM_DASH = /\u2014|\s\u2013\s/g;
+
+const FR_MARK = /(?<![\p{L}-])(?:le|la|les|je|j['’]|vous|nous|des|une|est|pour|avec)(?![\p{L}-])/giu;
+const EN_MARK = /(?<![\p{L}-])(?:the|and|i|you|we|of|to|is|with|for)(?![\p{L}-])/giu;
+
+/** 'fr' when French function words outnumber English ones, else 'en'. */
+export function detectLang(text) {
+  const t = String(text ?? '');
+  return (t.match(FR_MARK) ?? []).length > (t.match(EN_MARK) ?? []).length ? 'fr' : 'en';
+}
 
 const unique = (re, sentences) => [...new Set(sentences.flatMap((s) => [...s.matchAll(re)].map((m) => m[0].toLowerCase())))];
 
@@ -102,8 +133,8 @@ export function splitBody(text) {
  * @param {{kind?: 'letter'|'email', lang?: 'en'|'fr', company?: string, bannedLists?: object}} [opts]
  * @returns {{code: string, message: string}[]}
  */
-export function checkLetter(text, { kind = 'email', lang = 'en', company, bannedLists = BUILTIN_BANNED } = {}) {
-  const rules = EN;
+export function checkLetter(text, { kind = 'email', lang, company, bannedLists = BUILTIN_BANNED } = {}) {
+  const rules = RULES[lang ?? detectLang(text)] ?? EN;
   const findings = [];
   const add = (code, message) => findings.push({ code, message });
 
@@ -123,7 +154,7 @@ export function checkLetter(text, { kind = 'email', lang = 'en', company, banned
 
   const conditionals = unique(rules.conditional, sentences);
   if (conditionals.length) {
-    add('conditional', `Conditional forms (${conditionals.join(', ')}); state it directly: "I will", "I want".`);
+    add('conditional', `Conditional forms (${conditionals.join(', ')}); state it directly, in the present or the future.`);
   }
 
   if (company && !namesCompany(paragraphs[0].join(' '), company, rules.posting)) {
