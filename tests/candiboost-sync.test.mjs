@@ -106,6 +106,41 @@ test('a scope failure on threads.list is reported with its Google text', async (
   });
 });
 
+const QUOTA = { error: { code: 403, status: 'PERMISSION_DENIED', message: "Quota exceeded for quota metric 'Total Query Cost' and limit 'Units per minute per user'" } };
+
+test('a per-minute quota reply is retried with a growing wait, then succeeds', async () => {
+  const { fetch: inner } = fakeGmail();
+  let failures = 2;
+  const fetch = async (url, init) => {
+    if (String(url).includes('/threads/cb0001?') && failures-- > 0) return reply(QUOTA, { ok: false, status: 403 });
+    return inner(url, init);
+  };
+  const waits = [];
+  const threads = await fetchSentThreads({ fetch, env: ENV, sleep: async (ms) => { waits.push(ms); } });
+  assert.deepEqual(threads.map((t) => t.id), ['cb0001', 'cb0002', 'cb0003', 'cb0004']);
+  assert.equal(waits.length, 2);
+  assert.ok(waits[1] > waits[0], `waits ${waits}`);
+});
+
+test('a quota reply that never clears fails after a bounded number of tries', async () => {
+  const { fetch: inner } = fakeGmail();
+  const fetch = async (url, init) => (String(url).includes('/threads/cb0002?') ? reply(QUOTA, { ok: false, status: 403 }) : inner(url, init));
+  let waits = 0;
+  await assert.rejects(fetchSentThreads({ fetch, env: ENV, sleep: async () => { waits++; } }), (e) => {
+    assert.ok(e instanceof GmailError);
+    assert.match(e.message, /Quota exceeded/);
+    return true;
+  });
+  assert.ok(waits >= 3 && waits <= 8, `waits ${waits}`);
+});
+
+test('a scope failure is not retried', async () => {
+  const { fetch } = fakeGmail({ listReply: reply({ error: { code: 403, status: 'PERMISSION_DENIED', message: 'Request had insufficient authentication scopes.' } }, { ok: false, status: 403 }) });
+  let waits = 0;
+  await assert.rejects(fetchSentThreads({ fetch, env: ENV, sleep: async () => { waits++; } }));
+  assert.equal(waits, 0);
+});
+
 test('--help lists the commands and flags', () => {
   const r = sync(sandbox(), ['--help']);
   assert.equal(r.status, 0, r.stderr);
