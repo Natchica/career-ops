@@ -88,6 +88,8 @@ Use visual indicators:
 
 For each **overdue** or **urgent** entry only:
 
+**Candiboost sends first.** Before drafting, check each overdue entry with `followupCount` 0 whose tracker Notes carry `candiboost`. Draft none of those: the `candiboost` mode writes their personalised first follow-up. Report them as one line, "{N} Candiboost sends await their personalised follow-up: run `/career-ops candiboost follow`", and draft the remaining entries as below.
+
 1. Read the linked report (`reportPath` from JSON) for company context
 2. Read `cv.md` for proof points
 3. Read `config/profile.yml` for candidate name and identity
