@@ -54,6 +54,13 @@ test('the pending flow reads every page of the "En attente" filter into /tmp/can
   assert.match(mode, /candidate gives the page URL/);
 });
 
+test('spontaneous tells the candidate to delete the Candiboost row and never clicks it', () => {
+  const spontaneous = read('modes/spontaneous.md');
+  assert.ok(spontaneous.includes('candiboostPending'));
+  assert.match(spontaneous, /delete/);
+  assert.match(spontaneous, /never click/);
+});
+
 test('the follow-up and the template both end with the Outbound text gate for kind email', () => {
   const gate = /Run the Outbound text gate \(`modes\/_writing\.md`\), kind `email`/g;
   assert.ok((mode.match(gate) ?? []).length >= 2, 'follow and template must each run the gate');
