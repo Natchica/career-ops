@@ -14,7 +14,7 @@ const sandbox = () => mkdtempSync(join(tmpdir(), 'radar-registry-'));
 const row = (over = {}) => ({
   key: 'acme', name: 'Acme', aliases: '', sites: 'Colmar:A', country: 'FR', sector: '', size_band: '?', signals: '0',
   sources: 'sirene', first_seen: '2026-10-18', last_seen: '2026-10-18', portals_ref: '—', notes: '',
-  tier: '', tier_reason: '', tier_override: '', spontaneous: '', ...over,
+  tier: '', tier_reason: '', tier_override: '', spontaneous: '', hints: '', ...over,
 });
 
 test('registry path sits under data/ of the resolved root', () => {
@@ -120,8 +120,8 @@ test('50k rows parse, group and serialize in under 3 seconds', () => {
 // ---- tier columns and the locked read-modify-write ---------------------------
 import { updateRegistry } from '../radar/registry.mjs';
 
-test('RADAR_COLUMNS ends with the tier and spontaneous columns', () => {
-  assert.deepEqual(RADAR_COLUMNS.slice(-4), ['tier', 'tier_reason', 'tier_override', 'spontaneous']);
+test('RADAR_COLUMNS ends with the tier, spontaneous and hints columns', () => {
+  assert.deepEqual(RADAR_COLUMNS.slice(-5), ['tier', 'tier_reason', 'tier_override', 'spontaneous', 'hints']);
 });
 
 test('a registry written before the tier columns parses clean and serializes byte-identical', () => {
