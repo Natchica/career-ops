@@ -20,7 +20,7 @@ import { escapeFormulaCell, unescapeFormulaCell } from '../lib/tsv-formula-escap
 export const RADAR_COLUMNS = Object.freeze([
   'key', 'name', 'aliases', 'sites', 'country', 'sector', 'size_band', 'signals',
   'sources', 'first_seen', 'last_seen', 'portals_ref', 'notes',
-  'tier', 'tier_reason', 'tier_override', 'spontaneous',
+  'tier', 'tier_reason', 'tier_override', 'spontaneous', 'hints',
 ]);
 
 const STALE_LOCK_MS = 30 * 60 * 1000;
