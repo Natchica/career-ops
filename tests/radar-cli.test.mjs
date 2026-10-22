@@ -214,7 +214,7 @@ test('a census --write keeps tier, override, spontaneous and notes cells and add
     [kept.tier, kept.tier_reason, kept.tier_override, kept.spontaneous, kept.notes],
     ['1', 'tier 1: x', 'out', 'drafted:2026-10-20', 'x'],
   );
-  assert.deepEqual(after.columns.slice(-4), ['tier', 'tier_reason', 'tier_override', 'spontaneous']);
+  assert.deepEqual(after.columns.slice(-5), ['tier', 'tier_reason', 'tier_override', 'spontaneous', 'hints']);
 });
 
 test('--coverage without any registry or history is an empty baseline, not an error', () => {
