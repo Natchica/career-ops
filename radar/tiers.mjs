@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as yaml from 'js-yaml';
 import { RadarConfigError, foldName, loadZoneTable } from './zones.mjs';
+import { hintScore } from './hints.mjs';
 
 const ZONES = ['A', 'B', 'C', 'D'];
 const FOCUS_COUNTRIES = ['CH', 'FR', 'DE'];
@@ -203,7 +204,7 @@ const indexOrEnd = (list, value) => { const i = list.indexOf(value); return i ==
 const groupIndex = (groups, country) => { const i = groups.findIndex((g) => g.includes(country)); return i === -1 ? groups.length : i; };
 const signalCount = (p) => Number.parseInt(p.signals, 10) || 0;
 
-/** Order two Prospects of one tier: zone, country group, signals, size, then key. */
+/** Order two Prospects of one tier: zone, country group, hints, signals, size, then key. */
 export function compareProspects(a, b, rules) {
   const za = indexOrEnd(rules.order.zones, bestZone(a, rules));
   const zb = indexOrEnd(rules.order.zones, bestZone(b, rules));
@@ -211,6 +212,7 @@ export function compareProspects(a, b, rules) {
   const ca = groupIndex(rules.order.countries, a.country);
   const cb = groupIndex(rules.order.countries, b.country);
   if (ca !== cb) return ca - cb;
+  if (hintScore(a) !== hintScore(b)) return hintScore(b) - hintScore(a);
   if (signalCount(a) !== signalCount(b)) return signalCount(b) - signalCount(a);
   const sa = indexOrEnd(rules.order.sizeBands, String(a.size_band || '?'));
   const sb = indexOrEnd(rules.order.sizeBands, String(b.size_band || '?'));
