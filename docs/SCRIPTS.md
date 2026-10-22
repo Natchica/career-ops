@@ -341,6 +341,18 @@ To turn Prospects into scannable boards, `node discover-ats.mjs --from-radar --z
 
 ---
 
+## radar-enrich
+
+Adds relevance hints to the best Radar Prospects, so `spontaneous-pick next` can put a firm with a Java or Rust trace, or one that invites unsolicited applications, before an equally near firm without. For each selected Prospect (tier 1, untouched, zones A and B by default, with a GitHub organisation or a `portals.yml` entry) it reads the public GitHub organisation (its repositories and website field, with `GITHUB_PERSONAL_ACCESS_TOKEN`) and the firm's own careers page, then writes the `hints` cell of `data/radar.tsv`. Tokens: `gh:java`, `gh:rust` (a non-fork repository pushed within two years, language, name or topic), `site:java`, `site:rust`, `site:open-apps` (the careers page invites unsolicited applications, in English, German or French), and `checked:YYYY-MM-DD`. It reads organisations and company pages only, never people; `robots.txt` is honoured (an unreachable one skips the site); at most 3 requests per site, paced. Hints only order Prospects inside one zone and country group (`radar/tiers.mjs` `compareProspects`), so a Prospect in a better zone is never overtaken. A hint says the firm shows the stack or invites applications, not that it hires or suits you: the research step still decides.
+
+```bash
+node radar-enrich.mjs --dry-run --summary          # probe the next 40 Prospects, write nothing
+node radar-enrich.mjs --limit 100 --zones A,B      # probe and persist (every 8 rows)
+node radar-enrich.mjs --key acme,globex --refresh  # re-probe named Prospects
+```
+
+---
+
 ## spontaneous-pick
 
 The zero-model half of the `spontaneous` mode. `next` lists the best untouched tier 1 (then tier 2) Prospects and never writes. `mark` changes only the `spontaneous` cell of one row, under the registry lock.
