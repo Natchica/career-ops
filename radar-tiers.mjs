@@ -39,7 +39,7 @@ Options:
 const KNOWN_FLAGS = ['--write', '--explain', '--summary', '--json', '--help', '-h'];
 const VALUE_FLAGS = ['--explain'];
 
-const REASON_KEYS = ['out floor', 'out blacklist', 'out sector', 'out size', 'unknown', 'override'];
+const REASON_KEYS = ['out floor', 'out blacklist', 'out sector', 'out size', 'out non-employer', 'unverified', 'unknown', 'override'];
 
 function fail(message, code = CLI_EXIT.USAGE) {
   console.error(`Error: ${message}`);
@@ -48,6 +48,7 @@ function fail(message, code = CLI_EXIT.USAGE) {
 
 function reasonKind(reason) {
   if (reason.startsWith('override')) return 'override';
+  if (reason.startsWith('tier 2: unverified employer')) return 'unverified';
   return REASON_KEYS.find((k) => reason.startsWith(k));
 }
 
@@ -80,9 +81,9 @@ function renderSummary(receipt) {
   const lines = [`Radar tiers ${receipt.mode} — ${receipt.total} Prospects, ${receipt.changed} changed (${receipt.rules})`];
   for (const t of ['1', '2', '3', 'out']) lines.push(`  tier ${t}`.padEnd(12) + String(receipt.counts[t]).padStart(7));
   lines.push('  reasons');
-  for (const [k, n] of Object.entries(receipt.reasons)) if (n > 0) lines.push(`    ${k.padEnd(14)}${String(n).padStart(7)}`);
+  for (const [k, n] of Object.entries(receipt.reasons)) if (n > 0) lines.push(`    ${k.padEnd(18)}${String(n).padStart(7)}`);
   lines.push('  tier 1 by best zone and country');
-  for (const [k, n] of Object.entries(receipt.tier1).sort()) lines.push(`    ${k.padEnd(14)}${String(n).padStart(7)}`);
+  for (const [k, n] of Object.entries(receipt.tier1).sort()) lines.push(`    ${k.padEnd(18)}${String(n).padStart(7)}`);
   if (receipt.overrides.applied) lines.push(`  overrides applied: ${receipt.overrides.applied}`);
   if (receipt.overrides.invalid.length) lines.push(`  invalid tier_override ignored: ${receipt.overrides.invalid.join(', ')}`);
   lines.push(receipt.written ? '  written to data/radar.tsv' : '  preview only — rerun with --write to save');
