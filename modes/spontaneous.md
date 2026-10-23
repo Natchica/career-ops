@@ -17,6 +17,8 @@ This is a daily habit: one or two Prospects per session, not a batch. Never run 
 | `spontaneous sent <key>` | Run step 9: the candidate has sent the application |
 | `spontaneous skip <key> [reason]` | `node spontaneous-pick.mjs mark "<key>" skipped --reason "<reason>"` and offer the next pick |
 
+The list includes Candiboost pending rows that resolved to a Prospect. Each is flagged `candiboostPending` with the Candiboost row to delete once the application is sent.
+
 If `next` reports `untiered` or `staleTiers` above 0, tell the candidate to run `node radar-tiers.mjs --write --summary` first, and continue only on their say-so. If it shows no pick, say so and stop.
 
 ## Steps
