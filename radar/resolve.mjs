@@ -9,7 +9,8 @@
 
 import { foldName, resolveZone } from './zones.mjs';
 import { baseKey, LEGAL_FORMS } from './identity.mjs';
-import { GRAPH, SOLE_PROPRIETORSHIP, IN_LIQUIDATION, purposeStrength } from './sources/zefix.mjs';
+import { fetchJsonWithRetry } from '../providers/_http.mjs';
+import { ENDPOINT, GRAPH, USER_AGENT, SOLE_PROPRIETORSHIP, IN_LIQUIDATION, purposeStrength } from './sources/zefix.mjs';
 import { sizeBand } from './sources/sirene.mjs';
 
 export const NEEDLES_PER_QUERY = 10;
@@ -19,6 +20,7 @@ export const LINDAS_TIMEOUT_MS = 120_000;
 export const MAX_PAGES = 20;
 export const GENERIC_NAMES = new Set(['freelance web development', 'selfemployement', 'data services']);
 
+const SIRENE_SEARCH = 'https://recherche-entreprises.api.gouv.fr/search';
 const PAGE = 500;
 const MAX_NEEDLE = 80;
 const SAFE_NEEDLE = /^[\p{L}\p{N}][\p{L}\p{N} &'’.+-]*$/u;
@@ -217,4 +219,117 @@ export function parseCandidates(cell) {
     if (m) out.push({ legalName: m[1], place: m[2], postcode: m[3], entityId: m[4] });
   }
   return out;
+}
+
+const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A register client holding its own call counters, so the pacing carries
+ * across batches: LINDAS 3000 ms apart, the French API 340 ms apart.
+ *
+ * @param {{http: object, sleep?: (ms:number)=>Promise<void>}} ctx
+ */
+export function makeRegisterClient({ http, sleep = realSleep }) {
+  let z = 0;
+  let s = 0;
+  return {
+    async zefix(query) {
+      if (z++ > 0) await sleep(ZEFIX_PACE_MS);
+      return fetchJsonWithRetry(http, ENDPOINT, {
+        method: 'POST',
+        body: new URLSearchParams({ query }).toString(),
+        headers: {
+          Accept: 'application/sparql-results+json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT,
+        },
+        timeoutMs: LINDAS_TIMEOUT_MS,
+      });
+    },
+    async sirene(q) {
+      if (s++ > 0) await sleep(SIRENE_PACE_MS);
+      const params = new URLSearchParams({ q, per_page: '10', page: '1', etat_administratif: 'A' });
+      return fetchJsonWithRetry(http, `${SIRENE_SEARCH}?${params}`, { headers: { 'User-Agent': USER_AGENT } });
+    },
+  };
+}
+
+function rowFor(item, verdict, picked, today) {
+  const row = {
+    company: item.spelling, domain: item.domain ?? '', country: '', legal_name: '', entity_id: '', place: '', postcode: '',
+    sector: '', size_band: '', verdict, candidates: '', checked: today,
+  };
+  if (verdict === 'resolved') {
+    const { entity, site } = picked;
+    row.country = site.country;
+    row.legal_name = entity.legalName;
+    row.entity_id = entity.entityId;
+    row.place = site.place;
+    row.postcode = site.postcode;
+    row.sector = site.country === 'CH' ? (entity.purpose === 'strong' ? 'zefix-purpose:software' : '') : entity.sector;
+    row.size_band = entity.sizeBand || '?';
+  } else if (verdict === 'ambiguous' || verdict === 'out-of-zone') {
+    row.candidates = formatCandidates(picked.candidates);
+  }
+  return row;
+}
+
+/**
+ * Resolve up to NEEDLES_PER_QUERY spellings: a `.fr` domain asks SIRENE first,
+ * anything else Zefix first; the other register runs only when the first found
+ * no candidate. One paged LINDAS query serves the whole batch. Any rejected
+ * request rejects the call, so no partial row comes back.
+ *
+ * @param {{spelling:string, domain?:string, needle:{server:string, base:string}|null}[]} spellings
+ * @param {{table:object, today:string, client?:object, http?:object, sleep?:Function}} ctx
+ * @returns {Promise<Record<string,string>[]>} one row per spelling, in order
+ */
+export async function resolveSpellings(spellings, ctx) {
+  if (spellings.length > NEEDLES_PER_QUERY) throw new Error(`resolveSpellings: at most ${NEEDLES_PER_QUERY} spellings per call`);
+  const client = ctx.client ?? makeRegisterClient(ctx);
+  const { table, today } = ctx;
+  const verdicts = new Array(spellings.length).fill(null);
+  const sireneDone = new Set();
+
+  const viaSirene = async (i) => {
+    sireneDone.add(i);
+    const { needle } = spellings[i];
+    const answer = await client.sirene(needle.server);
+    verdicts[i] = chooseEntity(needle, sireneCandidates(answer, needle.server), { table });
+  };
+
+  const live = spellings.map((s, i) => i).filter((i) => spellings[i].needle);
+  const frFirst = live.filter((i) => String(spellings[i].domain ?? '').toLowerCase().endsWith('.fr'));
+  const chFirst = live.filter((i) => !frFirst.includes(i));
+
+  for (const i of frFirst) await viaSirene(i);
+
+  const toZefix = [...chFirst, ...frFirst.filter((i) => verdicts[i].verdict === 'unresolved')];
+  if (toZefix.length > 0) {
+    const servers = [...new Set(toZefix.map((i) => spellings[i].needle.server))];
+    const bindings = [];
+    for (let page = 0; ; page++) {
+      if (page >= MAX_PAGES) throw new Error(`candiboost: by-name query exceeds ${MAX_PAGES} pages (needles: ${servers.join(', ')})`);
+      const answer = await client.zefix(buildNameQuery(servers, page * PAGE));
+      const rows = answer?.results?.bindings ?? [];
+      bindings.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    const candidates = zefixCandidates(bindings);
+    for (const i of toZefix) {
+      const { needle } = spellings[i];
+      const own = candidates.filter((c) => c.needle === needle.server);
+      const chosen = chooseEntity(needle, own, { table });
+      if (chosen.verdict !== 'unresolved' || !frFirst.includes(i)) verdicts[i] = chosen;
+    }
+  }
+
+  for (const i of chFirst) {
+    if (verdicts[i].verdict === 'unresolved' && !sireneDone.has(i)) await viaSirene(i);
+  }
+
+  return spellings.map((item, i) => {
+    const picked = verdicts[i] ?? { verdict: 'unresolved', candidates: [] };
+    return rowFor(item, picked.verdict, picked, today);
+  });
 }
