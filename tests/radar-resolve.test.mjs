@@ -547,8 +547,8 @@ test('twenty variant needles go out in two chunks', async () => {
   await resolveSpellings(names.map((n) => spell(`${n} Group Services`)), ctx);
   const lindas = requests.filter((r) => r.kind === 'lindas');
   assert.equal(lindas.length, 3);
-  assert.equal((lindas[1].query.match(/"/g) ?? []).length / 2, 10);
-  assert.equal((lindas[2].query.match(/"/g) ?? []).length / 2, 10);
+  const needlesIn = (q) => (/VALUES \?needle \{ (.*) \}/.exec(q)[1].match(/"/g) ?? []).length / 2;
+  assert.deepEqual(lindas.map((r) => needlesIn(r.query)), [10, 10, 10]);
 });
 
 test('a page-capped variant chunk is logged and skipped', async () => {
