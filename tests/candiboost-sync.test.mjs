@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RADAR_COLUMNS, serializeRegistry } from '../radar/registry.mjs';
 import { GmailError, fetchSentThreads, rankFollowups, reserveInChunks } from '../candiboost-sync.mjs';
-import { REGISTRY_COLUMNS, readTable } from '../lib/candiboost.mjs';
+import { REGISTRY_COLUMNS, readTable, serializeTable } from '../lib/candiboost.mjs';
 import { parseTrackerRow, resolveColumns } from '../tracker-parse.mjs';
 import { listTree as walkFiles } from '../lib/walk-tree.mjs';
 
@@ -145,7 +145,7 @@ test('a scope failure is not retried', async () => {
 test('--help lists the commands and flags', () => {
   const r = sync(sandbox(), ['--help']);
   assert.equal(r.status, 0, r.stderr);
-  for (const word of ['sync', 'pick', 'mark', '--dry-run', '--summary', '--threads-file']) assert.ok(r.stdout.includes(word), word);
+  for (const word of ['sync', 'pick', 'mark', 'rematch', '--dry-run', '--summary', '--threads-file']) assert.ok(r.stdout.includes(word), word);
 });
 
 test('an unknown flag exits 1', () => {
@@ -464,4 +464,52 @@ test('reserveInChunks reserves at most 50 at a time and releases earlier chunks 
   const flaky = async (count) => { if (++n === 2) throw new Error('lock busy'); return Array.from({ length: count }, (_, i) => i + 1); };
   await assert.rejects(reserveInChunks(120, flaky, async (chunk) => released.push(chunk.length)), /lock busy/);
   assert.deepEqual(released, [50]);
+});
+
+function seedRegistry(root, rows) {
+  writeFileSync(join(root, 'data', 'candiboost.tsv'), serializeTable({
+    columns: [...REGISTRY_COLUMNS],
+    rows: rows.map((r) => ({ ...Object.fromEntries(REGISTRY_COLUMNS.map((c) => [c, ''])), sent_at: '2026-10-20', status: 'sent', ...r })),
+  }));
+}
+
+test('rematch refills radar_key only; company and every other cell unchanged', () => {
+  const root = sandbox();
+  writeFileSync(join(root, 'data', 'radar.tsv'), serializeRegistry({
+    columns: [...RADAR_COLUMNS],
+    rows: [...RADAR.slice(0, 2), { ...RADAR[2], aliases: 'Pistor Spelling' }],
+  }));
+  seedRegistry(root, [
+    { thread_id: 't1', company: 'Pistor Spelling', domain: 'pistor.ch', radar_key: '', to_email: 'a@pistor.ch', contact_name: 'A B', followup: '2026-10-25' },
+    { thread_id: 't2', company: 'Nobody', domain: 'nobody.example', radar_key: '' },
+    { thread_id: 't3', company: 'adesso Schweiz', domain: 'adesso.ch', radar_key: 'stale' },
+    { thread_id: 't4', company: 'Gone Co', domain: 'gone.example', radar_key: 'kept' },
+  ]);
+  const before = registryRows(root);
+  const r = sync(root, ['rematch']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { matched: 2, unmatched: 2, changed: 2 });
+  const after = registryRows(root);
+  assert.deepEqual(after.map((x) => x.radar_key), ['pistor', '', 'adesso schweiz', 'kept']);
+  assert.deepEqual(after.map((x) => ({ ...x, radar_key: '' })), before.map((x) => ({ ...x, radar_key: '' })));
+  assert.equal(JSON.parse(sync(root, ['rematch']).stdout).changed, 0);
+});
+
+test('rematch never clears a key on an ambiguous match', () => {
+  const root = sandbox();
+  writeFileSync(join(root, 'data', 'radar.tsv'), serializeRegistry({
+    columns: [...RADAR_COLUMNS],
+    rows: [...RADAR, { ...RADAR[2], key: 'pistor|CH|basel' }],
+  }));
+  seedRegistry(root, [{ thread_id: 't1', company: 'Pistor', domain: 'pistor.ch', radar_key: 'pistor' }]);
+  assert.deepEqual(JSON.parse(sync(root, ['rematch']).stdout), { matched: 0, unmatched: 1, changed: 0 });
+  assert.equal(registryRows(root)[0].radar_key, 'pistor');
+});
+
+test('rematch without a registry exits 1 and creates nothing', () => {
+  const root = sandbox();
+  const r = sync(root, ['rematch']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /no registry: run candiboost-sync\.mjs sync first/);
+  assert.equal(existsSync(join(root, 'data', 'candiboost.tsv')), false);
 });
