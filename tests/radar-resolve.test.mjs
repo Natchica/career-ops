@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   needleFor, buildNameQuery, zefixCandidates, sireneCandidates, chooseEntity, formatCandidates, parseCandidates,
   NEEDLES_PER_QUERY, makeRegisterClient, resolveSpellings, ZEFIX_PACE_MS, SIRENE_PACE_MS, LINDAS_TIMEOUT_MS, MAX_PAGES,
+  firstSegment, needleVariants, NON_OPERATING_RE, GROUP_TAILS, rowFor,
 } from '../radar/resolve.mjs';
 import { loadZoneTable } from '../radar/zones.mjs';
 
@@ -153,9 +154,12 @@ test('five out-of-zone prefix entities are out-of-zone with five candidates', ()
   assert.equal(r.candidates.length, 5);
 });
 
-test('two in-zone prefix entities are ambiguous', () => {
+test('two in-zone prefix operating entities are a brand, anchored on the best zone', () => {
   const r = choose('Foo', [zrow('Foo Basel AG', '4051', 'Basel'), zrow('Foo Zug AG', '6330', 'Cham')]);
-  assert.equal(r.verdict, 'ambiguous');
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.anchor, 'brand');
+  assert.equal(r.entity.legalName, 'Foo Basel AG');
+  assert.equal(r.site.place, 'Basel');
   assert.equal(r.candidates.length, 2);
 });
 
@@ -171,9 +175,11 @@ test('the exact rule wins over prefix entities', () => {
   assert.equal(r.entity.legalName, 'Foo AG');
 });
 
-test('two exact legal names with different UIDs are ambiguous', () => {
+test('two exact legal names with different UIDs are a brand, anchored on the best zone', () => {
   const r = choose('Foo', [zrow('Foo AG', '8001', 'Zürich'), zrow('Foo GmbH', '4051', 'Basel')]);
-  assert.equal(r.verdict, 'ambiguous');
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.anchor, 'brand');
+  assert.equal(r.entity.legalName, 'Foo GmbH');
   assert.equal(r.candidates.length, 2);
 });
 
@@ -328,14 +334,14 @@ test('a weak Zefix purpose leaves sector empty', async () => {
 test('ambiguous and out-of-zone rows fill candidates only', async () => {
   const { ctx } = fakeCtx({
     lindas: () => [
-      byNeedle('Foo Basel AG', '4051', 'Basel', 'foo', { uid: 'CHE111111111' }),
-      byNeedle('Foo Zug AG', '6330', 'Cham', 'foo', { uid: 'CHE222222222' }),
+      byNeedle('Foo Holding AG', '4051', 'Basel', 'foo', { uid: 'CHE111111111' }),
+      byNeedle('Foo Stiftung', '6330', 'Cham', 'foo', { uid: 'CHE222222222' }),
       byNeedle('Akros AG', '2502', 'Biel/Bienne', 'akros', { uid: 'CHE333333333' }),
     ],
   });
   const [amb, oz] = await resolveSpellings([spell('Foo'), spell('Akros')], ctx);
   assert.equal(amb.verdict, 'ambiguous');
-  assert.equal(amb.candidates, 'Foo Basel AG @ Basel (4051) #uid:CHE111111111;Foo Zug AG @ Cham (6330) #uid:CHE222222222');
+  assert.equal(amb.candidates, 'Foo Holding AG @ Basel (4051) #uid:CHE111111111;Foo Stiftung @ Cham (6330) #uid:CHE222222222');
   assert.deepEqual([amb.country, amb.legal_name, amb.entity_id, amb.place, amb.postcode, amb.sector, amb.size_band], ['', '', '', '', '', '', '']);
   assert.equal(oz.verdict, 'out-of-zone');
   assert.equal(oz.candidates, 'Akros AG @ Biel/Bienne (2502) #uid:CHE333333333');
@@ -434,4 +440,154 @@ test('an injected client is used instead of a new one', async () => {
   const [row] = await resolveSpellings([spell('Foo')], { table, today: TODAY, client });
   assert.equal(calls.length, 1);
   assert.equal(row.verdict, 'unresolved');
+});
+
+test('firstSegment cuts at a separator and drops parentheticals', () => {
+  assert.equal(firstSegment('Gruner AG, Gebäudetechnik Basel'), 'Gruner AG');
+  assert.equal(firstSegment('Foo (Bar) | Baz'), 'Foo');
+  assert.equal(firstSegment(''), '');
+});
+
+test('needleVariants drops group tails, "part of" and spaces around +', () => {
+  assert.deepEqual(needleVariants('Sonova Group'), [{ server: 'sonova', base: 'sonova' }]);
+  assert.deepEqual(needleVariants('Baloise CH'), [{ server: 'baloise', base: 'baloise' }]);
+  assert.deepEqual(needleVariants('Leica Geosystems part of Hexagon'), [{ server: 'leica geosystems', base: 'leica geosystems' }]);
+  assert.deepEqual(needleVariants('Endress + Hauser Process Solutions AG'), [{ server: 'endress+hauser process solutions', base: 'endress hauser process solutions' }]);
+  assert.deepEqual(needleVariants('Swatch Group Services').map((v) => v.server), ['swatch group', 'swatch']);
+  assert.deepEqual(needleVariants('Akros AG'), []);
+  assert.deepEqual(needleVariants('Group'), []);
+  assert.deepEqual(needleVariants('Data services'), []);
+  assert.ok(GROUP_TAILS.has('holding'));
+});
+
+test('NON_OPERATING_RE flags foundations, funds and law firms and nothing else of the samples', () => {
+  for (const n of ['AXA Anlagestiftung', 'HBL Freizügigkeitsstiftung', 'Siemens Healthineers Pension Fund', 'PLANZER LAW AG', 'HBL Finanz AG', 'Foo Holding AG']) {
+    assert.ok(NON_OPERATING_RE.test(n), n);
+  }
+  for (const n of ['PostFinance AG', 'Anlagenbau AG', 'Lawson AG', 'Coop Pronto AG']) assert.ok(!NON_OPERATING_RE.test(n), n);
+});
+
+test('brand rule: two exact entities in one zone pick the smaller UID', () => {
+  const r = choose('Helbling Technik', [
+    zrow('Helbling Technik AG', '8001', 'Zürich', { uid: 'CHE222222222' }),
+    zrow('Helbling Technik AG', '8005', 'Zürich', { uid: 'CHE111111111' }),
+  ]);
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.anchor, 'brand');
+  assert.equal(r.entity.entityId, 'uid:CHE111111111');
+});
+
+test('brand rule: Coop picks the shortest operating legal name in the best zone', () => {
+  const r = choose('Coop', [
+    zrow('Coop Genossenschaft', '4051', 'Basel'),
+    zrow('Coop Pronto AG', '4123', 'Allschwil'),
+    zrow('Coop Immobilien AG', '4051', 'Basel'),
+    zrow('Coop Pensionskasse', '8001', 'Zürich'),
+  ]);
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.entity.legalName, 'Coop Pronto AG');
+  assert.equal(r.candidates.length, 4);
+});
+
+test('brand rule: Rondo drops the foundation and the real-estate entity', () => {
+  const r = choose('Rondo', [
+    zrow('Rondo Stiftung', '4051', 'Basel'),
+    zrow('RONDO Musikreisen GmbH', '4051', 'Basel'),
+    zrow('Rondo Immobilien AG', '4051', 'Basel'),
+  ]);
+  assert.equal(r.entity.legalName, 'RONDO Musikreisen GmbH');
+});
+
+test('brand rule: only non-operating entities stay ambiguous', () => {
+  const r = choose('BLKB', [zrow('BLKB Pensionskasse', '4051', 'Basel'), zrow('BLKB Anlagestiftung', '4051', 'Basel')]);
+  assert.equal(r.verdict, 'ambiguous');
+  assert.equal(r.candidates.length, 2);
+});
+
+test('brand rule: an out-of-zone operating entity does not anchor a brand', () => {
+  const r = choose('Foo', [zrow('Foo AG', '2502', 'Biel/Bienne'), zrow('Foo Holding AG', '4051', 'Basel'), zrow('Foo GmbH', '2502', 'Biel/Bienne')]);
+  assert.equal(r.verdict, 'ambiguous');
+});
+
+test('rowFor writes the candidates of a brand pick and the purpose-based sector', () => {
+  const picked = choose('Foo', [zrow('Foo Basel AG', '4051', 'Basel', { uid: 'CHE111111111' }), zrow('Foo Zug AG', '6330', 'Cham', { uid: 'CHE222222222' })]);
+  const row = rowFor({ spelling: 'Foo', domain: '' }, 'resolved', picked, TODAY);
+  assert.equal(row.entity_id, 'uid:CHE111111111');
+  assert.equal(row.sector, 'zefix-purpose:software');
+  assert.equal(row.candidates, 'Foo Basel AG @ Basel (4051) #uid:CHE111111111;Foo Zug AG @ Cham (6330) #uid:CHE222222222');
+  const plain = choose('Bar', [zrow('Bar AG', '4051', 'Basel')]);
+  assert.equal(rowFor({ spelling: 'Bar' }, 'resolved', plain, TODAY).candidates, '');
+});
+
+test('a spelling without candidates retries its variants in one more query', async () => {
+  const { ctx, requests, sleeps } = fakeCtx({
+    lindas: (q, n) => (n === 2 ? [byNeedle('Sonova AG', '8001', 'Zürich', 'sonova')] : []),
+  });
+  const [row] = await resolveSpellings([spell('Sonova Group')], ctx);
+  const lindas = requests.filter((r) => r.kind === 'lindas');
+  assert.equal(lindas.length, 2);
+  assert.match(lindas[0].query, /VALUES \?needle \{ "sonova group" \}/);
+  assert.match(lindas[1].query, /VALUES \?needle \{ "sonova" \}/);
+  assert.ok(sleeps.includes(3000));
+  assert.equal(row.verdict, 'resolved');
+  assert.equal(row.legal_name, 'Sonova AG');
+  assert.equal(requests.filter((r) => r.kind === 'sirene').length, 0);
+});
+
+test('no variant query when the primary needle resolves', async () => {
+  const { ctx, requests } = fakeCtx({ lindas: () => [byNeedle('Sonova Group AG', '8001', 'Zürich', 'sonova group')] });
+  const [row] = await resolveSpellings([spell('Sonova Group')], ctx);
+  assert.equal(requests.length, 1);
+  assert.equal(row.verdict, 'resolved');
+});
+
+test('twenty variant needles go out in two chunks', async () => {
+  const names = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliet'];
+  const { ctx, requests } = fakeCtx();
+  await resolveSpellings(names.map((n) => spell(`${n} Group Services`)), ctx);
+  const lindas = requests.filter((r) => r.kind === 'lindas');
+  assert.equal(lindas.length, 3);
+  assert.equal((lindas[1].query.match(/"/g) ?? []).length / 2, 10);
+  assert.equal((lindas[2].query.match(/"/g) ?? []).length / 2, 10);
+});
+
+test('a page-capped variant chunk is logged and skipped', async () => {
+  const { ctx, logs } = fakeCtx({
+    lindas: (q, n) => (n === 1 ? [] : Array.from({ length: 500 }, (_, i) => byNeedle(`Zed ${i} AG`, '8001', 'Zürich', 'sonova'))),
+  });
+  const [row] = await resolveSpellings([spell('Sonova Group')], ctx);
+  assert.equal(row.verdict, 'unresolved');
+  assert.ok(logs.some((l) => /^candiboost: variant query skipped: .*exceeds 20 pages/.test(l)), logs.join('|'));
+});
+
+test('an HTTP 500 in the variant pass rejects the call', async () => {
+  const { ctx } = fakeCtx({ lindas: (q, n) => { if (n >= 2) throw Object.assign(new Error('HTTP 500'), { status: 500 }); return []; } });
+  await assert.rejects(resolveSpellings([spell('Sonova Group')], ctx), /HTTP 500/);
+});
+
+test('ctx.site patches only register-unresolved rows and keeps the column order', async () => {
+  const calls = [];
+  const site = async (spelling, info, c) => {
+    calls.push({ spelling, info, sameCtx: c === ctxRef });
+    return { verdict: 'site', country: 'CH', legal_name: 'Kobold GmbH', entity_id: 'site:kobold.ch', place: 'Allschwil', postcode: '4123', size_band: '?', candidates: 'x' };
+  };
+  const { ctx } = fakeCtx({ lindas: () => [byNeedle('Foo AG', '4051', 'Basel', 'foo')] });
+  const ctxRef = { ...ctx, site };
+  const rows = await resolveSpellings([spell('Foo'), spell('Kobold', 'kobold.ch'), spell('Data services', 'x.ch')], ctxRef);
+  assert.deepEqual(rows.map((r) => r.verdict), ['resolved', 'site', 'site']);
+  assert.deepEqual(rows.map((r) => Object.keys(r)), [COLUMNS, COLUMNS, COLUMNS]);
+  assert.deepEqual(calls.map((c) => c.spelling), ['Kobold', 'Data services']);
+  assert.deepEqual(calls[0].info, { domain: 'kobold.ch', needle: { server: 'kobold', base: 'kobold' }, variants: [] });
+  assert.deepEqual(calls[1].info, { domain: 'x.ch', needle: null, variants: [] });
+  assert.ok(calls.every((c) => c.sameCtx));
+  assert.equal(rows[1].company, 'Kobold');
+  assert.equal(rows[1].checked, TODAY);
+});
+
+test('a site hook returning null or a non-function ctx.site leaves the row alone', async () => {
+  const { ctx } = fakeCtx();
+  const [a] = await resolveSpellings([spell('Foo')], { ...ctx, site: async () => null });
+  const [b] = await resolveSpellings([spell('Foo')], { ...ctx, site: null });
+  assert.equal(a.verdict, 'unresolved');
+  assert.deepEqual(a, b);
 });
