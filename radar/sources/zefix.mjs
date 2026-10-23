@@ -31,15 +31,15 @@
 
 import { fetchJsonWithRetry } from '../../providers/_http.mjs';
 
-const ENDPOINT = 'https://lindas.admin.ch/query';
-const GRAPH = 'https://lindas.admin.ch/foj/zefix';
-const USER_AGENT = 'career-ops-radar/1.0 (personal job-search tool, local use, throttled)';
+export const ENDPOINT = 'https://lindas.admin.ch/query';
+export const GRAPH = 'https://lindas.admin.ch/foj/zefix';
+export const USER_AGENT = 'career-ops-radar/1.0 (personal job-search tool, local use, throttled)';
 const PAGE = 500;
 const BATCH = 25;
 const PACE_MS = 3000;
-const SOLE_PROPRIETORSHIP = 'https://ld.admin.ch/ech/97/legalforms/0101';
+export const SOLE_PROPRIETORSHIP = 'https://ld.admin.ch/ech/97/legalforms/0101';
 /** A firm being wound up is not hiring. The register keeps it, flagged only in its name. */
-const IN_LIQUIDATION = /\b(in liquidation|en liquidation|in liquidazione)\b/i;
+export const IN_LIQUIDATION = /\b(in liquidation|en liquidation|in liquidazione)\b/i;
 
 /** Stems the server filters on: a superset of what the local grading needs. */
 const SERVER_STEMS = ['software', 'informatik', 'programmier', 'logiciel', 'informatique', 'it-dienst', 'it-beratung', 'it consulting'];
