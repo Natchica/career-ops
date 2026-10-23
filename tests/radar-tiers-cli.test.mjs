@@ -135,7 +135,7 @@ test('--explain prints the trace and the rank inside the tier, and an unknown ke
   assert.equal(out.key, 'acme');
   assert.equal(out.tier, '1');
   assert.equal(out.rank, 1);
-  assert.deepEqual(out.trace.map((t) => t.rule), ['floor', 'blacklist', 'sector', 'size', 'zone', 'tier']);
+  assert.deepEqual(out.trace.map((t) => t.rule), ['floor', 'blacklist', 'non-employer', 'sector', 'size', 'zone', 'tier', 'unverified']);
   assert.equal(tiers(root, ['--explain', 'nope']).status, 2);
 });
 
@@ -147,6 +147,16 @@ test('--summary prints counts per tier and tier 1 by best zone and country', () 
   assert.match(r.stdout, /A:FR/);
   assert.match(r.stdout, /D:CH/);
   assert.match(r.stdout, /preview only/);
+});
+
+test('non-employer and unverified rows are counted in the reasons', () => {
+  const root = sandbox({ rows: [
+    prospect({ key: 'boeva', name: 'Boeva Lab, ETH Zurich', sources: 'github-orgs', sites: 'Basel:B', country: 'CH' }),
+    prospect({ key: 'robo', name: 'Acme Robotics', sources: 'github-orgs', sites: 'Basel:B', country: 'CH' }),
+  ] });
+  const out = JSON.parse(tiers(root, []).stdout);
+  assert.equal(out.reasons['out non-employer'], 1);
+  assert.equal(out.reasons.unverified, 1);
 });
 
 test('--help prints usage and writes nothing', () => {
