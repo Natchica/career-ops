@@ -218,14 +218,15 @@ test('the Radar index matches by exact base name, never by prefix', () => {
   const index = buildProspectIndex(PROSPECTS);
   assert.equal(index.match('ADESSO SCHWEIZ', 'adesso.ch').row.key, 'adesso schweiz');
   assert.equal(index.match('', 'pistor.ch').row.key, 'pistor');
-  assert.deepEqual(index.match('BKB', 'bkb.ch'), { row: null, ambiguous: false });
+  assert.deepEqual(index.match('BKB', 'bkb.ch'), { row: null, ambiguous: false, hits: 0 });
   assert.equal(index.match('AIS', 'adesso.ch').row.key, 'adesso insurance solutions schweiz');
+  assert.equal(index.match('Pistor', '').hits, 1);
   assert.equal(index.match('note', 'x.ch').row, null);
 });
 
 test('two Prospects with one base are ambiguous', () => {
   const index = buildProspectIndex([prospect({ key: 'foo|fr|a', name: 'Foo SA' }), prospect({ key: 'foo|ch|b', name: 'Foo AG' })]);
-  assert.deepEqual(index.match('FOO', 'foo.ch'), { row: null, ambiguous: true });
+  assert.deepEqual(index.match('FOO', 'foo.ch'), { row: null, ambiguous: true, hits: 2 });
 });
 
 test('findTrackedRow matches by company and takes the newest row', () => {
