@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import * as yaml from 'js-yaml';
 import { RadarConfigError, foldName, loadZoneTable } from './zones.mjs';
 import { hintScore } from './hints.mjs';
+import { splitList } from './identity.mjs';
 
 const ZONES = ['A', 'B', 'C', 'D'];
 const FOCUS_COUNTRIES = ['CH', 'FR', 'DE'];
@@ -36,6 +37,17 @@ function buildRules(doc, source) {
   }
   const sizeBands = hard.size_bands ?? [];
   if (!isList(sizeBands) || sizeBands.some((b) => !KNOWN_BANDS.includes(b))) fail('hard_out.size_bands holds an unknown band');
+
+  const patterns = hard.non_employer_patterns ?? [];
+  if (!isList(patterns)) fail('hard_out.non_employer_patterns must be a list');
+  const nonEmployer = patterns.map((p, i) => {
+    if (typeof p?.pattern !== 'string' || !p.pattern) fail(`non_employer_patterns[${i}] needs a pattern`);
+    try { return { re: new RegExp(p.pattern, 'iu'), label: String(p.label ?? p.pattern) }; }
+    catch (e) { fail(`non_employer_patterns[${i}] "${p.pattern}" does not compile: ${e.message}`); }
+  });
+
+  const unverified = doc.unverified_sources ?? ['github-orgs'];
+  if (!isList(unverified) || unverified.some((u) => typeof u !== 'string' || !u.trim())) fail('unverified_sources must be a list of source ids');
 
   const poolZones = doc.pool_zones;
   if (!isList(poolZones) || poolZones.length === 0 || poolZones.some((z) => !ZONES.includes(z))) {
@@ -67,6 +79,8 @@ function buildRules(doc, source) {
     blacklist: hard.blacklist !== false,
     divisions: divisions.map((d) => ({ division: String(d.division), label: String(d.label ?? '') })),
     hardOutSizes: [...sizeBands],
+    nonEmployer,
+    unverifiedSources: unverified.map((u) => u.trim()),
     poolZones: [...poolZones],
     tiers: tiers.map((t) => ({ tier: t.tier, minSignals: t.min_signals })),
     order: { zones: [...order.zones], countries: order.countries.map((g) => [...g]), sizeBands: [...bands] },
@@ -141,6 +155,23 @@ export function prospectNames(row) {
   return [row.name, ...aliases].filter(Boolean);
 }
 
+/** True when the row carries a board: a portals_ref or the `ats-employers:board` source token. */
+export function hasBoard(row) {
+  return (Boolean(row.portals_ref) && row.portals_ref !== '—')
+    || splitList(row.sources).includes('ats-employers:board');
+}
+
+/**
+ * An unverified employer is known only from sources that never confirm a company
+ * exists (GitHub organisations): no register id alias, no board.
+ */
+export function isUnverified(row, rules) {
+  const tokens = splitList(row.sources).filter((t) => !t.includes(':'));
+  return tokens.length > 0 && tokens.every((t) => (rules.unverifiedSources ?? []).includes(t))
+    && !splitList(row.aliases).some((a) => a.startsWith('#uid:') || a.startsWith('#siren:'))
+    && !hasBoard(row);
+}
+
 const VALID_OVERRIDES = new Set(['1', '2', '3', 'out']);
 
 /**
@@ -166,6 +197,11 @@ export function classify(row, rules, { isBlacklisted = () => false } = {}) {
   note('blacklist', listed ? 'out' : 'pass');
   if (listed) { tier = 'out'; reason = `out blacklist: ${row.name}`; }
 
+  const unverified = isUnverified(row, rules);
+  const hit = !tier && unverified ? (rules.nonEmployer ?? []).find((p) => prospectNames(row).some((n) => p.re.test(n))) : undefined;
+  note('non-employer', tier || !unverified ? 'skipped' : hit ? 'out' : 'pass', hit?.label ?? (unverified ? '' : 'verified employer'));
+  if (hit) { tier = 'out'; reason = `out non-employer: ${hit.label}`; }
+
   const division = NAF_CODE.test(token) ? rules.divisions.find((d) => d.division === token.slice(0, 2)) : undefined;
   note('sector', tier ? 'skipped' : division ? 'out' : 'pass', division?.division ?? '');
   if (!tier && division) { tier = 'out'; reason = `out sector: ${division.division} ${division.label}`; }
@@ -190,6 +226,10 @@ export function classify(row, rules, { isBlacklisted = () => false } = {}) {
     if (size === '?') reason += '; size ?';
     if (!String(row.sector ?? '').trim()) reason += '; no NAF code';
   }
+
+  const only = `${splitList(row.sources).filter((t) => !t.includes(':')).join(', ')} only`;
+  note('unverified', !unverified ? 'skipped' : tier === '1' ? '2' : 'pass', unverified ? only : '');
+  if (unverified && tier === '1') { tier = '2'; reason = `tier 2: unverified employer (${only}); ${reason.slice('tier 1: '.length)}`; }
 
   const given = String(row.tier_override ?? '').trim();
   const valid = VALID_OVERRIDES.has(given);
@@ -255,8 +295,6 @@ export function formatSpontaneous({ state, date, tracker, why }) {
  */
 export function selectForDiscovery(rows, rules, { zones = null, limit = 20 } = {}) {
   const wanted = Array.isArray(zones) && zones.length ? new Set(zones) : null;
-  const hasBoard = (p) => (p.portals_ref && p.portals_ref !== '—')
-    || String(p.sources ?? '').split(';').map((s) => s.trim()).includes('ats-employers:board');
   const inZone = (p) => !wanted
     || String(p.sites ?? '').split(';').some((site) => wanted.has(site.split(':').pop()?.trim()));
   return rows
