@@ -87,7 +87,7 @@ test('absent keys: defaults apply and unverified_sources [] restores tier 1', ()
   assert.deepEqual(loaded.nonEmployer, []);
   assert.deepEqual(loaded.unverifiedSources, ['github-orgs']);
   assert.equal(run({ name: 'Boeva Lab, ETH Zurich' }, loaded).tier, '2');
-  const off = rulesWith('unverified_sources: []').load();
+  const off = rulesWith('unverified_sources: []', template.replace(/^unverified_sources:.*$/m, '')).load();
   const r = run({}, off);
   assert.deepEqual([r.tier, r.reason], ['1', 'tier 1: zone B, CH, 1 signal; size ?; no NAF code']);
 });
