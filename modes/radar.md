@@ -99,9 +99,9 @@ node radar-tiers.mjs --explain acme      # rule trace and rank for one Prospect
 
 | Tier | Rule |
 | ---- | ---- |
-| `out` | First match wins, in this order: a sector-floor NAF code (weapons, military vehicles, gambling), a company in `data/blacklist.md`, a consumer or trades sector division, a known size band of 1-2 or 3-5 staff |
-| `1` | In the pool (zone A, B, C or D) with at least one tech signal |
-| `2` | In the pool with no tech signal |
+| `out` | First match wins, in this order: a sector-floor NAF code (weapons, military vehicles, gambling), a company in `data/blacklist.md`, a consumer or trades sector division, a known size band of 1-2 or 3-5 staff, or an unverified employer whose name matches `hard_out.non_employer_patterns` (ETH, FHNW, university, institute, research group, laboratory) |
+| `1` | In the pool (zone A, B, C or D) with at least one tech signal, unless the Prospect is known only from `unverified_sources` |
+| `2` | In the pool with no tech signal, or a Prospect known only from `unverified_sources` (GitHub organisations by default), with no register id and no board, whatever its signals |
 | `3` | No zone A-D in `sites` |
 
 Zones C and D exist only in Switzerland in the zone table, so a French or German Prospect is zone A or B. An unknown size or a missing sector never demotes a row: it only adds `size ?` or `no NAF code` to `tier_reason`. Payday lending and surveillance have no NAF code, so they are checked at research time by the `spontaneous` mode, not here.
