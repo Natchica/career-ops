@@ -62,6 +62,14 @@ _Avoid_: cold application (collides with cold outreach in `contacto`), unsolicit
 A Spontaneous application that the Candiboost campaign sent from the candidate's own Gmail with the campaign's fixed template, to a named person it found at the company. It is read back from the Sent folder by `candiboost-sync.mjs` into `data/candiboost.tsv`, a tracker row and a contact; it is never written by the `spontaneous` mode. Its personalised mail is its first follow-up, drafted through the full spontaneous flow and sent as a reply in the same thread.
 _Avoid_: blast, campaign mail (the template, not the send), import (the sync reads mail, not a file)
 
+**Candiboost pending row**:
+A company listed on the candidate's Candiboost campaign that has not been mailed yet ("En attente"), read from the campaign page into `data/candiboost-pending.tsv` with its domain. It becomes a Prospect only through a Resolution whose seat is in a zone; until then it is not in the Radar and cannot be picked.
+_Avoid_: pending company (collides with tracker statuses), candidate (the person), target
+
+**Resolution**:
+The register lookup that turns a Candiboost spelling into one legal entity with a seat: Zefix (CH) or SIRENE (FR), by name, never guessed. Recorded once per spelling in `data/candiboost-resolved.tsv` with a verdict: `resolved`, `out-of-zone`, `ambiguous` (the candidate picks the entity by hand), `unresolved` (no register entry) or `hand` (the candidate typed the place).
+_Avoid_: match (the base-key index lookup in `lib/candiboost.mjs`), geocoding, enrichment (reserved for `radar-enrich.mjs` hints)
+
 **Brief**:
 The registration one-pager the candidate sends a Cabinet, generated only from `cv.md`, `config/profile.yml` and `modes/_profile.md`.
 _Avoid_: profile, candidate summary, dossier
@@ -94,6 +102,8 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - A **Spontaneous application** targets a **Prospect** directly; it has no **Lead**, its **Via** is `—` (Direct), and it enters the tracker only once it is actually sent
 - A **Spontaneous application** starts from a **Prospect** of **Tier** 1 or 2, one per daily run, chosen by the candidate from the best untouched ones
 - A **Candiboost send** is a **Spontaneous application** whose first mail was not written here: it has a tracker row and a contact from the day it is synced, and its company is excluded from the daily pick of first mails; its personalised mail is a follow-up, chosen 1-2 per day from the sends 7 days old or older, **Tier** 1 first
+- A **Candiboost pending row** becomes a **Prospect** through a **Resolution** with an in-zone seat, carrying `candiboost` in its sources and the Candiboost spelling as an alias; the `candiboost` source token is never a tech signal
+- The one daily list of first mails is `spontaneous next`: a **Candiboost pending row** that is a **Prospect** appears there like any other, in gate order, flagged with the row to delete after sending
 - A **Brief** is versioned; the registry records which version each **Cabinet** holds
 
 ## Example dialogue
