@@ -19,6 +19,8 @@ This is a daily habit: one or two Prospects per session, not a batch. Never run 
 
 The list includes Candiboost pending rows that resolved to a Prospect. Each is flagged `candiboostPending` with the Candiboost row to delete once the application is sent.
 
+Each pick line of `next --summary` ends with its source tokens (` · sources: zefix, candiboost`), signal sub-tokens dropped. A Prospect known only from `github-orgs` is an unverified employer and is tier 2 at most.
+
 If `next` reports `untiered` or `staleTiers` above 0, tell the candidate to run `node radar-tiers.mjs --write --summary` first, and continue only on their say-so. If it shows no pick, say so and stop.
 
 ## Steps
