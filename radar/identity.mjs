@@ -113,7 +113,7 @@ function emptyRow(key, name) {
  *
  * @param {Record<string,string>[]} rows existing registry rows (not mutated)
  * @param {object[]} records zoned records: {name, legalName?, entityId?, sites,
- *   country, sector?, sizeBand?, sourceId, boardSignal?}
+ *   country, sector?, sizeBand?, aliases?: string[], sourceId, boardSignal?}
  * @param {{canon:(n:string)=>string, today:string, portalsNames:Map<string,string>}} ctx
  * @returns {{rows:Record<string,string>[], newKeys:string[], knownKeys:string[], collisions:object[]}}
  */
@@ -150,6 +150,10 @@ export function mergeRecords(rows, records, { canon, today, portalsNames }) {
     if (record.legalName && record.legalName.trim() !== row.name) aliasAdds.push(record.legalName.trim());
     if (record.name.trim() !== row.name) aliasAdds.push(record.name.trim());
     if (record.entityId) aliasAdds.push(`#${record.entityId}`);
+    for (const alias of record.aliases ?? []) {
+      const a = String(alias ?? '').replace(/;/g, ',').trim();
+      if (a && !a.startsWith('#') && a !== row.name) aliasAdds.push(a);
+    }
     row.aliases = joinList(union(splitList(row.aliases), aliasAdds));
 
     const siteCells = (record.sites ?? []).map((s) => `${s.place}:${s.zone}`);
