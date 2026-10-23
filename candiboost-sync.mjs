@@ -5,6 +5,7 @@
  *   node --env-file=.env candiboost-sync.mjs sync [--dry-run] [--summary] [--threads-file <json>]
  *   node candiboost-sync.mjs pick [--count N] [--domain <d>] [--summary]
  *   node candiboost-sync.mjs mark <thread_id> followed [--date YYYY-MM-DD]
+ *   node candiboost-sync.mjs rematch
  *
  * `sync` reads the candidate's own Sent folder (gmail.readonly), records every
  * Candiboost send in data/candiboost.tsv, the tracker and the phonebook, and
@@ -42,7 +43,7 @@ const GMAIL_ENV = ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKE
 const FETCH_BATCH = 4;
 const REGISTRY_SPEC = { key: 'thread_id', columns: REGISTRY_COLUMNS };
 
-const USAGE = `Usage: node --env-file=.env candiboost-sync.mjs <sync|pick|mark> [options]
+const USAGE = `Usage: node --env-file=.env candiboost-sync.mjs <sync|pick|mark|rematch> [options]
 
   sync [--dry-run] [--summary] [--threads-file <json>]
       Read the Candiboost sends from Gmail Sent (read-only) and record them in
@@ -52,6 +53,9 @@ const USAGE = `Usage: node --env-file=.env candiboost-sync.mjs <sync|pick|mark> 
       The next sends due their personalised follow-up (1-2). Read-only.
   mark <thread_id> followed [--date YYYY-MM-DD]
       Record that the follow-up was sent. Changes the registry only.
+  rematch
+      Refill radar_key of the sends from the Radar. Never renames a company,
+      never clears a key, touches no other cell.
 
 Options:
   --dry-run            Report what sync would do, write nothing
@@ -566,6 +570,27 @@ async function runMark(args, root) {
   console.log(JSON.stringify(receipt, null, 2));
 }
 
+async function runRematch(root) {
+  const path = join(root, 'data', 'candiboost.tsv');
+  if (readTable(path, REGISTRY_SPEC).missing) fail('no registry: run candiboost-sync.mjs sync first');
+  const index = buildProspectIndex(readRegistry(registryPath(root)).rows);
+  const receipt = await updateTable(path, REGISTRY_SPEC, (fresh) => {
+    let matched = 0;
+    let unmatched = 0;
+    let changed = 0;
+    const rows = fresh.rows.map((row) => {
+      const hit = index.match(row.company, row.domain ?? '').row;
+      if (!hit) { unmatched++; return row; }
+      matched++;
+      if (hit.key === row.radar_key) return row;
+      changed++;
+      return { ...row, radar_key: hit.key };
+    });
+    return { rows, result: { matched, unmatched, changed } };
+  });
+  console.log(JSON.stringify(receipt));
+}
+
 async function main(args) {
   validateFlags(args, KNOWN_FLAGS, USAGE, { valueFlags: VALUE_FLAGS, requireOperand: true });
   const root = getCareerOpsRoot();
@@ -574,7 +599,8 @@ async function main(args) {
     if (command === 'sync') await runSync(args, root);
     else if (command === 'pick') runPick(args, root);
     else if (command === 'mark') await runMark(args, root);
-    else fail('first argument must be sync, pick or mark (see --help)');
+    else if (command === 'rematch') await runRematch(root);
+    else fail('first argument must be sync, pick, mark or rematch (see --help)');
   } catch (e) {
     if (e instanceof MarkError) fail(e.message, e.exit);
     throw e;
