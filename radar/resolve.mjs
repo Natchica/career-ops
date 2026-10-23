@@ -33,7 +33,7 @@ export const firstSegment = (s) => String(s ?? '').split(/,| - | – | \| /)[0].
 export const GROUP_TAILS = new Set(['group', 'holding', 'global', 'dach', 'ch', 'be', 'schweiz', 'switzerland', 'suisse', 'services']);
 
 /** Legal names of entities that hold money or property rather than employ people. */
-export const NON_OPERATING_RE = /stiftung|holding|pensionskasse|vorsorge|immobilien|patenschaft|freiz(?:ü|ue|u)gigkeit|\b(?:fund|capital|finance|finanz|anlage|law)\b/iu;
+export const NON_OPERATING_RE = /stiftung|holding|pensionskasse|vorsorge|immobilien|patenschaft|freiz(?:ü|ue|u)gigkeit|\b(?:fund|capital|finance|finanz|anlage|law|hair|coiffure|friseur|apotheke|pharmacie|musik|reisen|trading|reinsurance|versicherungs?-?vermittlung|treuhand|beratungs?-?gesellschaft|verm(?:ö|oe|o)gensverwaltung)\b/iu;
 
 /**
  * The lookup needle for a Candiboost spelling: `server` keeps accents, lower
@@ -213,8 +213,8 @@ const ZONE_LETTER = /^[A-D]$/;
 
 /**
  * The brand rule for a set of entities that would otherwise be ambiguous:
- * drop the non-operating ones, then take the operating entity with the best
- * in-zone site, the shortest legal name, the smallest id.
+ * drop the non-operating ones, then take the operating entity with the fewest
+ * brand-key tokens, then the best in-zone site, the shortest legal name, the smallest id.
  */
 function brandPick(set, table) {
   const options = [];
@@ -227,7 +227,9 @@ function brandPick(set, table) {
     if (sites.length > 0) options.push({ entity, site: sites[0].site, zone: sites[0].zone });
   }
   if (options.length === 0) return null;
-  options.sort((a, b) => (a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : 0)
+  const tokens = (e) => baseKey(e.legalName).split(' ').filter(Boolean).length;
+  options.sort((a, b) => tokens(a.entity) - tokens(b.entity)
+    || (a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : 0)
     || a.entity.legalName.length - b.entity.legalName.length
     || (a.entity.entityId < b.entity.entityId ? -1 : a.entity.entityId > b.entity.entityId ? 1 : 0));
   const [best] = options;
