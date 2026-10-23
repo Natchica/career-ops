@@ -145,7 +145,7 @@ const NOT_IN_RADAR_YET = 'resolved, not in the Radar yet: run radar.mjs --source
 
 function unmatchedReason(resolution) {
   if (!resolution) return 'no resolution yet';
-  if (resolution.verdict === 'resolved' || resolution.verdict === 'hand') return NOT_IN_RADAR_YET;
+  if (['resolved', 'hand', 'site'].includes(resolution.verdict)) return NOT_IN_RADAR_YET;
   if (resolution.verdict === 'ambiguous') return 'ambiguous: fill entity_id in data/candiboost-resolved.tsv';
   if (resolution.verdict === 'out-of-zone') {
     const places = [...new Set(parseCandidates(resolution.candidates).map((c) => c.place).filter(Boolean))].slice(0, 3);
@@ -160,7 +160,7 @@ function unmatchedReason(resolution) {
  * in tier 1 or 2 (1 before 2, ties by name). Every other such row goes to
  * `notWorkable` with its reason.
  */
-export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, resolutionFor = () => null, count = 2 }) {
+export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, resolutionFor = () => null, matchFor = () => null, count = 2 }) {
   const excluded = { tracked: 0, blacklisted: 0, marked: 0, out: 0 };
   const eligible = [];
   const notWorkable = [];
@@ -171,7 +171,15 @@ export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, reso
     if (findTrackedRow(names, trackerRows)) { excluded.tracked++; continue; }
     if (names.filter(Boolean).some(isBlacklisted)) { excluded.blacklisted++; continue; }
     if (radar && parseSpontaneous(radar.spontaneous).state !== 'none') { excluded.marked++; continue; }
-    if (!radar) { notWorkable.push({ company: row.company, reason: unmatchedReason(resolutionFor(row.company)) }); continue; }
+    if (!radar) {
+      const match = matchFor(row);
+      const resolution = resolutionFor(row.company);
+      const reason = match?.ambiguous && ['resolved', 'hand', 'site'].includes(resolution?.verdict)
+        ? `Radar match ambiguous (${match.hits} rows): fill radar_key in data/candiboost-pending.tsv`
+        : unmatchedReason(resolution);
+      notWorkable.push({ company: row.company, reason });
+      continue;
+    }
     if (radar.tier === '1' || radar.tier === '2') { eligible.push({ row, tier: radar.tier }); continue; }
     if (radar.tier === 'out') { excluded.out++; notWorkable.push({ company: row.company, reason: radar.tier_reason || 'tier out' }); continue; }
     if (radar.tier === '3') { notWorkable.push({ company: row.company, reason: radar.tier_reason || 'tier 3' }); continue; }
@@ -212,7 +220,9 @@ function runRank(args, root) {
   }
   const pending = readTable(join(root, 'data', 'candiboost-pending.tsv'), SPEC);
   if (pending.missing) fail('no pending list: run candiboost-pending.mjs ingest <json> first');
-  const radarByKey = new Map(readRegistry(registryPath(root)).rows.map((r) => [r.key, r]));
+  const registryRows = readRegistry(registryPath(root)).rows;
+  const radarByKey = new Map(registryRows.map((r) => [r.key, r]));
+  const index = buildProspectIndex(registryRows);
   const blacklist = loadBlacklist(join(root, 'data', 'blacklist.md'));
   const resolved = readTable(join(root, 'data', 'candiboost-resolved.tsv'), { key: 'company', columns: RESOLVED_COLUMNS });
   const resolutions = new Map(resolved.rows.map((r) => [r.company, r]));
@@ -221,6 +231,7 @@ function runRank(args, root) {
     trackerRows: readTrackerRows(root),
     isBlacklisted: (name) => findBlacklistEntry(blacklist, name, '') !== null,
     resolutionFor: (company) => resolutions.get(company) ?? null,
+    matchFor: (row) => index.match(row.company, row.domain ?? ''),
     count,
   });
   console.log(args.includes('--summary') ? renderRank(out) : JSON.stringify(out, null, 2));
