@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RADAR_COLUMNS, parseRegistry, serializeRegistry } from '../radar/registry.mjs';
+import { makeTrackedCheck } from '../spontaneous-pick.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const sandboxes = [];
@@ -210,4 +211,10 @@ test('--help prints usage', () => {
   const r = pick(root, ['--help']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /Usage: node spontaneous-pick\.mjs/);
+});
+
+test('a Prospect whose Candiboost alias is tracked counts as tracked', () => {
+  const row = prospect({ key: 'dormakaba schweiz', name: 'dormakaba Schweiz AG', aliases: 'dormakaba;#uid:CHE1' });
+  assert.equal(makeTrackedCheck(['dormakaba'])(row), true);
+  assert.equal(makeTrackedCheck(['dormakaba'])({ ...row, aliases: '#uid:CHE1' }), false);
 });
