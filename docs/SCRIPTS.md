@@ -304,7 +304,7 @@ The offline half — *which enabled entries does no provider claim?* — is pure
 
 Census of the employers with a site in commute zones A to D. It names companies and does nothing else with them: no evaluation, screening, scoring or contact, and it never writes `portals.yml`, `data/pipeline.md` or the tracker. Each employer becomes one Prospect (one brand or group, in-zone sites listed) in `data/radar.tsv`. Zone E and remote are out. The Radar is local only. Full detail: `modes/radar.md`.
 
-Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `zefix` (Swiss firms whose registered purpose is software, from the open-data copy on LINDAS under its fair-use rules), `github-orgs` (organisations only, token optional), and `directories` (documents the vetted candidates and enables none). Preview is the default; nothing is written without `--write`.
+Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `zefix` (Swiss firms whose registered purpose is software, from the open-data copy on LINDAS under its fair-use rules), `github-orgs` (organisations only, token optional), `directories` (documents the vetted candidates and enables none), and `candiboost` (the Candiboost pending rows and sends, looked up by name in Zefix or SIRENE). The `candiboost` register lookups are paced, LINDAS at one request per 3 seconds, so `node radar.mjs --source candiboost --write --summary` can take 20 to 40 minutes. The source keeps one verdict per spelling in `data/candiboost-resolved.tsv` and writes it in preview too; see `DATA_CONTRACT.md`. Preview is the default; nothing is written without `--write`.
 
 ```bash
 node radar.mjs --sources                          # sources with auth state and last save (JSON)
@@ -382,9 +382,10 @@ node candiboost-sync.mjs sync --threads-file threads.json           # saved thre
 node candiboost-sync.mjs pick --summary                             # the 1-2 sends due their follow-up
 node candiboost-sync.mjs pick --domain acme.ch                      # one domain's sends, with a reason for each ineligible one
 node candiboost-sync.mjs mark <thread_id> followed [--date 2026-10-21]
+node candiboost-sync.mjs rematch                                    # refill radar_key in data/candiboost.tsv
 ```
 
-`sync` writes, in this order: tracker additions merged through `merge-tracker.mjs` (`Applied`, score `N/A`), a `candiboost send {date}` note on an already tracked company through `set-status.mjs`, `data/contacts.tsv`, `data/reply-candidates.json`, and `data/candiboost.tsv` last. Every step is idempotent, so a re-run after a crash heals and a second run writes nothing. A thread status only moves forward: `sent`, then `bounced`, then `replied`. `pick` is read-only and lists sends at least 7 days old that are still `sent`, not followed up and tracked as `Applied`. `mark` changes only the `followup` cell of one row.
+`sync` writes, in this order: tracker additions merged through `merge-tracker.mjs` (`Applied`, score `N/A`), a `candiboost send {date}` note on an already tracked company through `set-status.mjs`, `data/contacts.tsv`, `data/reply-candidates.json`, and `data/candiboost.tsv` last. Every step is idempotent, so a re-run after a crash heals and a second run writes nothing. A thread status only moves forward: `sent`, then `bounced`, then `replied`. `pick` is read-only and lists sends at least 7 days old that are still `sent`, not followed up and tracked as `Applied`. `mark` changes only the `followup` cell of one row. `rematch` fills only `radar_key`, from the current Radar, and needs no network.
 
 **Exit codes:** `0` on success; `1` on a usage error, a Google auth or scope error, a pending `batch/tracker-additions/*.tsv`, or a merge or note that failed; `2` for an unknown thread; `3` for a refused mark (another follow-up date is already recorded).
 
@@ -395,12 +396,13 @@ node candiboost-sync.mjs mark <thread_id> followed [--date 2026-10-21]
 The pending half of the `candiboost` mode. `ingest` replaces `data/candiboost-pending.tsv` with the "En attente" rows the agent read from the Candiboost page. `rank` is read-only. No network and no model.
 
 ```bash
-node candiboost-pending.mjs ingest /tmp/candiboost-pending.json   # [{company, status}], only "En attente" rows are kept
-node candiboost-pending.mjs rank --summary                        # 2 picks, each with the Candiboost row to delete
+node candiboost-pending.mjs ingest /tmp/candiboost-pending.json   # [{company, domain, status}], only "En attente" rows are kept
+node candiboost-pending.mjs rematch                               # refill radar_key from the current Radar
+node candiboost-pending.mjs rank --summary                        # 2 tier 1 and 2 picks, each with the Candiboost row to delete, then the not workable rows
 node candiboost-pending.mjs rank --count 5                        # 1 to 10 picks (JSON)
 ```
 
-`ingest` folds duplicates, matches each company to the Radar, keeps `first_seen` for rows that survive and drops rows missing from the new read. `rank` leaves out tracked, blacklisted, `spontaneous`-marked and tier `out` companies, then orders tier 1, 2, 3 and unmatched, ties by name.
+`ingest` folds duplicates, stores the domain, matches each company to the Radar by name, alias or domain label, keeps `first_seen` for rows that survive and drops rows missing from the new read. `rank` leaves out tracked, blacklisted, `spontaneous`-marked and tier `out` companies, then picks tier 1 and 2 companies only, tier 1 first, ties by name. Every other pending row is listed under `not workable` with its reason: tier `out`, tier 3, no tier yet, or no Radar match. `rematch` fills only `radar_key` and never clears one.
 
 **Exit codes:** `0` on success; `1` on a usage error, an unreadable or malformed input file, or `rank` before any `ingest`.
 
