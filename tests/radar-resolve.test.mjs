@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   needleFor, buildNameQuery, zefixCandidates, sireneCandidates, chooseEntity, formatCandidates, parseCandidates,
-  NEEDLES_PER_QUERY,
+  NEEDLES_PER_QUERY, makeRegisterClient, resolveSpellings, ZEFIX_PACE_MS, SIRENE_PACE_MS, LINDAS_TIMEOUT_MS, MAX_PAGES,
 } from '../radar/resolve.mjs';
 import { loadZoneTable } from '../radar/zones.mjs';
 
@@ -214,4 +214,224 @@ test('formatCandidates caps at 20 entries and counts the rest', () => {
   assert.equal(cell.split(';').length, 21);
   assert.ok(cell.endsWith(';+3 more'));
   assert.equal(parseCandidates(cell).length, 20);
+});
+
+const TODAY = '2026-10-23';
+const COLUMNS = ['company', 'domain', 'country', 'legal_name', 'entity_id', 'place', 'postcode', 'sector', 'size_band', 'verdict', 'candidates', 'checked'];
+
+/** A fake transport: `lindas(query, n)` and `sirene(q, n)` return bindings and an API answer. */
+function fakeCtx({ lindas = () => [], sirene = () => ({ results: [] }), fail = null } = {}) {
+  const requests = [];
+  const sleeps = [];
+  const logs = [];
+  const ctx = {
+    table,
+    today: TODAY,
+    log: (m) => logs.push(m),
+    sleep: async (ms) => { sleeps.push(ms); },
+    http: {
+      sleep: async () => {},
+      fetchJson: async (url, opts = {}) => {
+        if (fail) throw fail;
+        if (url.startsWith('https://lindas.admin.ch/query')) {
+          const query = new URLSearchParams(String(opts.body ?? '')).get('query');
+          requests.push({ kind: 'lindas', url, opts, query });
+          return { results: { bindings: lindas(query, requests.filter((r) => r.kind === 'lindas').length) } };
+        }
+        const q = new URL(url).searchParams.get('q');
+        requests.push({ kind: 'sirene', url, opts, q });
+        return sirene(q, requests.filter((r) => r.kind === 'sirene').length);
+      },
+    },
+  };
+  return { ctx, requests, sleeps, logs };
+}
+const spell = (spelling, domain = '') => ({ spelling, domain, needle: needleFor(spelling) });
+const byNeedle = (name, pc, city, needle, over = {}) => zrow(name, pc, city, { ...over, needle });
+const frAnswer = (name, siren, sites, over = {}) => ({
+  results: [{
+    siren, nom_complet: name, activite_principale: '62.01Z', nature_juridique: '5710', tranche_effectif_salarie: '12',
+    siege: sites[0], matching_etablissements: sites.slice(1), ...over,
+  }],
+});
+
+test('LINDAS requests are POSTed with the fair-use headers and timeoutMs >= 60000', async () => {
+  const { ctx, requests } = fakeCtx();
+  await resolveSpellings([spell('Akros AG')], ctx);
+  const [r] = requests;
+  assert.equal(r.kind, 'lindas');
+  assert.equal(r.opts.method, 'POST');
+  assert.ok(r.opts.timeoutMs >= 60000);
+  assert.equal(r.opts.timeoutMs, LINDAS_TIMEOUT_MS);
+  assert.match(r.opts.headers['User-Agent'], /career-ops-radar/);
+  assert.equal(r.opts.headers['Content-Type'], 'application/x-www-form-urlencoded');
+  assert.match(r.opts.headers.Accept, /sparql-results\+json/);
+});
+
+test('two calls on one client sleep 3000 ms before the second LINDAS request and 340 ms before the second SIRENE one', async () => {
+  const { ctx, sleeps } = fakeCtx();
+  const client = makeRegisterClient(ctx);
+  await client.zefix('q1');
+  assert.deepEqual(sleeps, []);
+  await client.zefix('q2');
+  assert.deepEqual(sleeps, [ZEFIX_PACE_MS]);
+  await client.sirene('acme');
+  assert.deepEqual(sleeps, [3000]);
+  await client.sirene('acme');
+  assert.deepEqual(sleeps, [3000, SIRENE_PACE_MS]);
+  assert.equal(SIRENE_PACE_MS, 340);
+});
+
+test('a SIRENE request is a GET on the search API with the name and open establishments only', async () => {
+  const { ctx, requests } = fakeCtx();
+  await makeRegisterClient(ctx).sirene('acme logiciel');
+  const u = new URL(requests[0].url);
+  assert.equal(`${u.origin}${u.pathname}`, 'https://recherche-entreprises.api.gouv.fr/search');
+  assert.equal(u.searchParams.get('q'), 'acme logiciel');
+  assert.equal(u.searchParams.get('etat_administratif'), 'A');
+  assert.match(requests[0].opts.headers['User-Agent'], /career-ops-radar/);
+});
+
+test('a null needle makes no request and resolves to unresolved with no candidates', async () => {
+  const { ctx, requests } = fakeCtx();
+  const [row] = await resolveSpellings([spell('Data services', 'x.ch')], ctx);
+  assert.equal(requests.length, 0);
+  assert.deepEqual(Object.keys(row), COLUMNS);
+  assert.equal(row.company, 'Data services');
+  assert.equal(row.domain, 'x.ch');
+  assert.equal(row.verdict, 'unresolved');
+  assert.equal(row.candidates, '');
+  assert.equal(row.checked, TODAY);
+});
+
+test('a Zefix hit fills the entity, the software marker and the zone place', async () => {
+  const { ctx, requests } = fakeCtx({
+    lindas: () => [byNeedle('ABF Informatik AG', '6330', 'Cham', 'abf informatik', { uid: 'CHE222222222' })],
+  });
+  const [row] = await resolveSpellings([spell('ABF Informatik')], ctx);
+  assert.equal(requests.length, 1);
+  assert.deepEqual(row, {
+    company: 'ABF Informatik', domain: '', country: 'CH', legal_name: 'ABF Informatik AG', entity_id: 'uid:CHE222222222',
+    place: 'Cham', postcode: '6330', sector: 'zefix-purpose:software', size_band: '?', verdict: 'resolved', candidates: '', checked: TODAY,
+  });
+});
+
+test('a weak Zefix purpose leaves sector empty', async () => {
+  const { ctx } = fakeCtx({
+    lindas: () => [byNeedle('Foo AG', '4051', 'Basel', 'foo', { d: 'Handel mit Hardware und Software.' })],
+  });
+  const [row] = await resolveSpellings([spell('Foo')], ctx);
+  assert.equal(row.verdict, 'resolved');
+  assert.equal(row.sector, '');
+});
+
+test('ambiguous and out-of-zone rows fill candidates only', async () => {
+  const { ctx } = fakeCtx({
+    lindas: () => [
+      byNeedle('Foo Basel AG', '4051', 'Basel', 'foo', { uid: 'CHE111111111' }),
+      byNeedle('Foo Zug AG', '6330', 'Cham', 'foo', { uid: 'CHE222222222' }),
+      byNeedle('Akros AG', '2502', 'Biel/Bienne', 'akros', { uid: 'CHE333333333' }),
+    ],
+  });
+  const [amb, oz] = await resolveSpellings([spell('Foo'), spell('Akros')], ctx);
+  assert.equal(amb.verdict, 'ambiguous');
+  assert.equal(amb.candidates, 'Foo Basel AG @ Basel (4051) #uid:CHE111111111;Foo Zug AG @ Cham (6330) #uid:CHE222222222');
+  assert.deepEqual([amb.country, amb.legal_name, amb.entity_id, amb.place, amb.postcode, amb.sector, amb.size_band], ['', '', '', '', '', '', '']);
+  assert.equal(oz.verdict, 'out-of-zone');
+  assert.equal(oz.candidates, 'Akros AG @ Biel/Bienne (2502) #uid:CHE333333333');
+  assert.equal(oz.entity_id, '');
+  assert.equal(oz.place, '');
+});
+
+test('one LINDAS query carries every needle of the batch', async () => {
+  const { ctx, requests } = fakeCtx();
+  await resolveSpellings([spell('Akros AG'), spell('Müller Informatik GmbH'), spell('Akros')], ctx);
+  const lindas = requests.filter((r) => r.kind === 'lindas');
+  assert.equal(lindas.length, 1);
+  assert.match(lindas[0].query, /VALUES \?needle \{ "akros" "müller informatik" \}/);
+});
+
+test('a .fr domain goes to SIRENE first and never reaches LINDAS when it resolves', async () => {
+  const { ctx, requests } = fakeCtx({
+    sirene: () => frAnswer('ACME LOGICIEL SAS', '111111111', [
+      { code_postal: '75001', libelle_commune: 'PARIS' },
+      { code_postal: '68000', libelle_commune: 'COLMAR' },
+    ]),
+  });
+  const [row] = await resolveSpellings([spell('Acme Logiciel', 'acme.fr')], ctx);
+  assert.deepEqual(requests.map((r) => r.kind), ['sirene']);
+  assert.equal(requests[0].q, 'acme logiciel');
+  assert.deepEqual(
+    [row.verdict, row.country, row.legal_name, row.entity_id, row.place, row.postcode, row.sector, row.size_band],
+    ['resolved', 'FR', 'ACME LOGICIEL SAS', 'siren:111111111', 'COLMAR', '68000', '62.01Z', '20-49'],
+  );
+});
+
+test('an unresolved .fr spelling falls back to LINDAS exactly once', async () => {
+  const { ctx, requests } = fakeCtx({
+    lindas: () => [byNeedle('Acme AG', '8001', 'Zürich', 'acme', { uid: 'CHE444444444' })],
+  });
+  const [row] = await resolveSpellings([spell('Acme', 'acme.fr')], ctx);
+  assert.deepEqual(requests.map((r) => r.kind), ['sirene', 'lindas']);
+  assert.equal(row.verdict, 'resolved');
+  assert.equal(row.country, 'CH');
+});
+
+test('an unresolved Zefix spelling falls back to SIRENE exactly once', async () => {
+  const { ctx, requests } = fakeCtx({
+    sirene: () => frAnswer('ACME SAS', '555555555', [{ code_postal: '68100', libelle_commune: 'MULHOUSE' }]),
+  });
+  const [row] = await resolveSpellings([spell('Acme', 'acme.ch')], ctx);
+  assert.deepEqual(requests.map((r) => r.kind), ['lindas', 'sirene']);
+  assert.equal(row.verdict, 'resolved');
+  assert.equal(row.country, 'FR');
+  assert.equal(row.entity_id, 'siren:555555555');
+});
+
+test('an out-of-zone first answer does not trigger the second register', async () => {
+  const { ctx, requests } = fakeCtx({ lindas: () => [byNeedle('Akros AG', '2502', 'Biel/Bienne', 'akros')] });
+  const [row] = await resolveSpellings([spell('Akros')], ctx);
+  assert.deepEqual(requests.map((r) => r.kind), ['lindas']);
+  assert.equal(row.verdict, 'out-of-zone');
+});
+
+test('a full page is followed by OFFSET 500 and a short page ends the paging, 3000 ms apart', async () => {
+  const { ctx, requests, sleeps } = fakeCtx({
+    lindas: (q, n) => (n === 1
+      ? Array.from({ length: 500 }, (_, i) => byNeedle(`Zed ${i} AG`, '8001', 'Zürich', 'foo'))
+      : [byNeedle('Foo AG', '4051', 'Basel', 'foo')]),
+  });
+  const [row] = await resolveSpellings([spell('Foo')], ctx);
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].query, /OFFSET 0/);
+  assert.match(requests[1].query, /OFFSET 500/);
+  assert.deepEqual(sleeps, [ZEFIX_PACE_MS]);
+  assert.equal(row.verdict, 'resolved');
+  assert.equal(row.legal_name, 'Foo AG');
+});
+
+test('more than 20 pages throws and names the needles', async () => {
+  const { ctx, requests } = fakeCtx({ lindas: () => Array.from({ length: 500 }, (_, i) => byNeedle(`Zed ${i} AG`, '8001', 'Zürich', 'foo')) });
+  await assert.rejects(resolveSpellings([spell('Foo')], ctx), /candiboost: by-name query exceeds 20 pages \(needles: foo\)/);
+  assert.equal(requests.length, MAX_PAGES);
+});
+
+test('an HTTP 500 rejects the whole call', async () => {
+  const { ctx } = fakeCtx({ fail: Object.assign(new Error('HTTP 500'), { status: 500 }) });
+  await assert.rejects(resolveSpellings([spell('Foo')], ctx), /HTTP 500/);
+});
+
+test('more than 10 spellings throw before any request', async () => {
+  const { ctx, requests } = fakeCtx();
+  const many = Array.from({ length: NEEDLES_PER_QUERY + 1 }, (_, i) => spell(`Company${i}`));
+  await assert.rejects(resolveSpellings(many, ctx), /at most 10/);
+  assert.equal(requests.length, 0);
+});
+
+test('an injected client is used instead of a new one', async () => {
+  const calls = [];
+  const client = { zefix: async (q) => { calls.push(q); return { results: { bindings: [] } }; }, sirene: async () => ({ results: [] }) };
+  const [row] = await resolveSpellings([spell('Foo')], { table, today: TODAY, client });
+  assert.equal(calls.length, 1);
+  assert.equal(row.verdict, 'unresolved');
 });
