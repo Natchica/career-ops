@@ -26,6 +26,7 @@ const FAMILY: Record<string, string> = {
   ats: "Job boards and ATS",
   directory: "Startup directory",
   github: "GitHub organisations",
+  campaign: "Candiboost campaign",
 };
 
 export function RadarSources({ defaultOpen }: { defaultOpen: boolean }) {
