@@ -17,13 +17,14 @@ import {
   PENDING_COLUMNS, REGISTRY_COLUMNS, RESOLVED_COLUMNS, readTable, updateTable,
 } from '../../lib/candiboost.mjs';
 import { resolveZone } from '../zones.mjs';
-import { NEEDLES_PER_QUERY, makeRegisterClient, needleFor, parseCandidates, resolveSpellings } from '../resolve.mjs';
+import { NEEDLES_PER_QUERY, firstSegment, makeRegisterClient, needleFor, parseCandidates, resolveSpellings } from '../resolve.mjs';
+import { siteResolve } from '../site.mjs';
 
 const PENDING_SPEC = { key: 'company', columns: PENDING_COLUMNS };
 const SENDS_SPEC = { key: 'thread_id', columns: REGISTRY_COLUMNS };
 const RESOLVED_SPEC = { key: 'company', columns: RESOLVED_COLUMNS };
 const PROMOTABLE = new Set(['ambiguous', 'out-of-zone', 'unresolved']);
-const VERDICTS = ['resolved', 'hand', 'out-of-zone', 'ambiguous', 'unresolved'];
+const VERDICTS = ['resolved', 'site', 'hand', 'out-of-zone', 'ambiguous', 'unresolved'];
 
 const text = (value) => String(value ?? '').trim();
 const collapse = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -105,7 +106,7 @@ export default {
     if (batches.length > 0) {
       const client = ctx.client ?? makeRegisterClient(ctx);
       for (const [i, batch] of batches.entries()) {
-        const rows = await resolveSpellings(batch.map((s) => ({ ...s, needle: needleFor(s.spelling) })), { ...ctx, client });
+        const rows = await resolveSpellings(batch.map((s) => ({ ...s, needle: needleFor(s.spelling) })), { ...ctx, client, site: ctx.site === undefined ? siteResolve : ctx.site });
         await updateTable(resolvedPath, RESOLVED_SPEC, (fresh) => {
           const known = new Set(fresh.rows.map((r) => r.company));
           return {
@@ -132,12 +133,13 @@ export default {
 
     const rows = readTable(resolvedPath, RESOLVED_SPEC).rows;
     const counts = Object.fromEntries(VERDICTS.map((v) => [v, rows.filter((r) => r.verdict === v).length]));
-    log(`candiboost: resolved ${counts.resolved} · hand ${counts.hand} · out-of-zone ${counts['out-of-zone']} · ambiguous ${counts.ambiguous} · unresolved ${counts.unresolved}`);
+    log(`candiboost: resolved ${counts.resolved} · site ${counts.site} · hand ${counts.hand} · out-of-zone ${counts['out-of-zone']} · ambiguous ${counts.ambiguous} · unresolved ${counts.unresolved}`);
 
     for (const row of rows) {
-      if (row.verdict !== 'resolved' && row.verdict !== 'hand') continue;
+      if (!['resolved', 'hand', 'site'].includes(row.verdict)) continue;
+      const brand = row.verdict === 'resolved' && text(row.candidates) !== '';
       yield {
-        name: text(row.legal_name) || row.company,
+        name: brand ? firstSegment(row.company) : (text(row.legal_name) || row.company),
         legalName: text(row.legal_name) || undefined,
         aliases: [row.company],
         entityId: text(row.entity_id) || undefined,
