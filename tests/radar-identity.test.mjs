@@ -126,3 +126,20 @@ test('signal tokens are not duplicated when a company is seen again', () => {
   const twice = merge(once, [r]).rows;
   assert.equal(twice[0].sources, 'zefix;zefix:software');
 });
+
+test("record aliases land in the Prospect's aliases", () => {
+  const { rows } = merge([], [rec({ name: 'ABF Informatik AG', aliases: ['ABF Informatik', 'abf-informatik; shop'] })]);
+  assert.equal(rows[0].aliases, 'ABF Informatik;abf-informatik, shop');
+});
+
+test('an alias that is empty, equals the name or starts with # is not added', () => {
+  const { rows } = merge([], [rec({ name: 'Acme', aliases: ['', '  ', 'Acme', '#uid:CHE1', 'Acme Corp'] })]);
+  assert.equal(rows[0].aliases, 'Acme Corp');
+});
+
+test('countSignals ignores the candiboost source token', () => {
+  assert.equal(countSignals({ sources: 'candiboost', sector: '' }), 0);
+  const { rows } = merge([], [rec({ name: 'Acme', sourceId: 'candiboost', aliases: ['Acme X'] })]);
+  assert.equal(rows[0].signals, '0');
+  assert.equal(rows[0].sources, 'candiboost');
+});
