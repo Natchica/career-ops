@@ -173,8 +173,8 @@ export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, reso
     if (radar && parseSpontaneous(radar.spontaneous).state !== 'none') { excluded.marked++; continue; }
     if (!radar) { notWorkable.push({ company: row.company, reason: unmatchedReason(resolutionFor(row.company)) }); continue; }
     if (radar.tier === '1' || radar.tier === '2') { eligible.push({ row, tier: radar.tier }); continue; }
-    if (radar.tier === 'out') { excluded.out++; notWorkable.push({ company: row.company, reason: `tier out: ${radar.tier_reason}` }); continue; }
-    if (radar.tier === '3') { notWorkable.push({ company: row.company, reason: `tier 3: ${radar.tier_reason}` }); continue; }
+    if (radar.tier === 'out') { excluded.out++; notWorkable.push({ company: row.company, reason: radar.tier_reason || 'tier out' }); continue; }
+    if (radar.tier === '3') { notWorkable.push({ company: row.company, reason: radar.tier_reason || 'tier 3' }); continue; }
     notWorkable.push({ company: row.company, reason: 'no tier yet: run node radar-tiers.mjs --write' });
   }
   eligible.sort((a, b) => Number(a.tier) - Number(b.tier) || a.row.company.localeCompare(b.row.company));
