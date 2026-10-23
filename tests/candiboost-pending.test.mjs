@@ -187,8 +187,8 @@ test('rank lists tier out, tier 3, unmatched and untiered rows under notWorkable
   const out = JSON.parse(run(root, ['rank', '--count', '10']).stdout);
   assert.deepEqual(out.notWorkable, [
     { company: 'Alpha Ltd', reason: 'no resolution yet' },
-    { company: 'Gone', reason: 'tier out: out: blacklisted' },
-    { company: 'Tier Three', reason: 'tier 3: tier 3: zone D' },
+    { company: 'Gone', reason: 'out: blacklisted' },
+    { company: 'Tier Three', reason: 'tier 3: zone D' },
     { company: 'Zeta GmbH', reason: 'no resolution yet' },
   ]);
 });
@@ -228,7 +228,7 @@ test('rank --summary tells the candidate which row to delete, and rank writes no
   assert.match(r.stdout, /after you send it, delete the row "adesso Schweiz" in Candiboost/);
   assert.match(r.stdout, /after you send it, delete the row "Pistor" in Candiboost/);
   assert.match(r.stdout, /not workable: \d+/);
-  assert.match(r.stdout, /  - Gone: tier out: out: blacklisted/);
+  assert.match(r.stdout, /  - Gone: out: blacklisted/);
   assert.equal(sha(pendingFile(root)), before);
 });
 
