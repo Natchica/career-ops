@@ -118,6 +118,7 @@ export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, c
     country: row.country,
     signals: Number.parseInt(row.signals, 10) || 0,
     size_band: row.size_band || '?',
+    sources: String(row.sources ?? '').split(';').map((s) => s.trim()).filter((t) => t && !t.includes(':')),
     portals_ref: row.portals_ref && row.portals_ref !== '—' ? row.portals_ref : null,
     savedContacts: contactsFor(row),
     candiboostPending: candiboostRowFor(row) !== null,
@@ -170,7 +171,7 @@ function renderNext(out) {
   for (const p of out.picks) {
     const board = p.portals_ref ? ` · board: ${p.portals_ref}` : '';
     const contacts = p.savedContacts ? ` · ${p.savedContacts} saved contact(s)` : '';
-    lines.push(`  ${p.rank}. ${p.name} (${p.key}) — tier ${p.tier} · ${p.sites.join(', ')} · ${p.country} · ${p.signals} signal(s) · size ${p.size_band}${board}${contacts}`);
+    lines.push(`  ${p.rank}. ${p.name} (${p.key}) — tier ${p.tier} · ${p.sites.join(', ')} · ${p.country} · ${p.signals} signal(s) · size ${p.size_band}${board}${contacts}${p.sources.length ? ` · sources: ${p.sources.join(', ')}` : ''}`);
     lines.push(`     ${p.tier_reason}`);
     if (p.candiboostPending) lines.push(`     pending in Candiboost: delete row "${p.candiboostRow}" after sending`);
   }
