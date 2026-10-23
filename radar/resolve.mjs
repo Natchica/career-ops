@@ -27,6 +27,14 @@ const SAFE_NEEDLE = /^[\p{L}\p{N}][\p{L}\p{N} &'’.+-]*$/u;
 const LEGAL_FORM_STRINGS = new Set(LEGAL_FORMS.map((f) => f.join(' ')));
 const MAX_LISTED = 20;
 
+/** The spelling up to its first separator, parentheticals removed. */
+export const firstSegment = (s) => String(s ?? '').split(/,| - | – | \| /)[0].replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+
+export const GROUP_TAILS = new Set(['group', 'holding', 'global', 'dach', 'ch', 'be', 'schweiz', 'switzerland', 'suisse', 'services']);
+
+/** Legal names of entities that hold money or property rather than employ people. */
+export const NON_OPERATING_RE = /stiftung|holding|pensionskasse|vorsorge|immobilien|patenschaft|freiz(?:ü|ue|u)gigkeit|\b(?:fund|capital|finance|finanz|anlage|law)\b/iu;
+
 /**
  * The lookup needle for a Candiboost spelling: `server` keeps accents, lower
  * case, for the register's LCASE; `base` is the folded key the entity names are
@@ -36,7 +44,7 @@ const MAX_LISTED = 20;
  * @returns {{server:string, base:string}|null}
  */
 export function needleFor(spelling) {
-  const segment = String(spelling ?? '').split(/,| - | – | \| /)[0].replace(/\([^)]*\)/g, ' ').trim();
+  const segment = firstSegment(spelling);
   const base = baseKey(segment);
   if (base.length < 3 || GENERIC_NAMES.has(base)) return null;
   const tokens = segment.toLowerCase().normalize('NFC').split(/\s+/).filter(Boolean);
@@ -49,6 +57,35 @@ export function needleFor(spelling) {
   if (foldName(server) !== base) server = base;
   if (server.length > MAX_NEEDLE || !SAFE_NEEDLE.test(server)) return null;
   return { server, base };
+}
+
+/**
+ * Extra needles for a spelling the primary needle did not find: "part of ..."
+ * cut, spaces around `+` removed, trailing group words dropped one at a time.
+ * The primary needle is never repeated.
+ *
+ * @returns {{server:string, base:string}[]}
+ */
+export function needleVariants(spelling) {
+  const primary = needleFor(spelling);
+  if (!primary) return [];
+  const texts = [];
+  let text = primary.server.replace(/\s+part of\s.*$/i, '').replace(/\s*\+\s*/g, '+');
+  texts.push(text);
+  const tokens = text.split(/\s+/);
+  while (tokens.length > 1 && GROUP_TAILS.has(tokens.at(-1))) {
+    tokens.pop();
+    texts.push(tokens.join(' '));
+  }
+  const seen = new Set([primary.server]);
+  const out = [];
+  for (const t of texts) {
+    const n = needleFor(t);
+    if (!n || seen.has(n.server)) continue;
+    seen.add(n.server);
+    out.push(n);
+  }
+  return out;
 }
 
 /**
@@ -172,17 +209,43 @@ function groupEntities(candidates) {
   return [...byId.values()];
 }
 
+const ZONE_LETTER = /^[A-D]$/;
+
+/**
+ * The brand rule for a set of entities that would otherwise be ambiguous:
+ * drop the non-operating ones, then take the operating entity with the best
+ * in-zone site, the shortest legal name, the smallest id.
+ */
+function brandPick(set, table) {
+  const options = [];
+  for (const entity of set) {
+    if (NON_OPERATING_RE.test(entity.legalName)) continue;
+    const sites = entity.sites
+      .map((site) => ({ site, zone: resolveZone(table, site).zone ?? '' }))
+      .filter((x) => ZONE_LETTER.test(x.zone))
+      .sort((a, b) => (a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : 0));
+    if (sites.length > 0) options.push({ entity, site: sites[0].site, zone: sites[0].zone });
+  }
+  if (options.length === 0) return null;
+  options.sort((a, b) => (a.zone < b.zone ? -1 : a.zone > b.zone ? 1 : 0)
+    || a.entity.legalName.length - b.entity.legalName.length
+    || (a.entity.entityId < b.entity.entityId ? -1 : a.entity.entityId > b.entity.entityId ? 1 : 0));
+  const [best] = options;
+  return { verdict: 'resolved', anchor: 'brand', entity: best.entity, site: best.site, candidates: set };
+}
+
 /**
  * The pick rule: exact legal-name base key, else exactly one in-zone prefix
- * entity, else ambiguous, else out-of-zone, else unresolved.
+ * entity, else the brand rule on the set, else ambiguous, else out-of-zone,
+ * else unresolved.
  *
- * @returns {{verdict:'resolved'|'ambiguous'|'out-of-zone'|'unresolved', entity?:object, site?:object, candidates:object[]}}
+ * @returns {{verdict:'resolved'|'ambiguous'|'out-of-zone'|'unresolved', anchor?:'brand', entity?:object, site?:object, candidates:object[]}}
  */
 export function chooseEntity(needle, candidates, { table }) {
   const entities = groupEntities(candidates);
   const zoned = (e) => e.sites.find((s) => /^[A-D]$/.test(resolveZone(table, s).zone ?? ''));
   const exact = entities.filter((e) => baseKey(e.legalName) === needle.base);
-  if (exact.length > 1) return { verdict: 'ambiguous', candidates: exact };
+  if (exact.length > 1) return brandPick(exact, table) ?? { verdict: 'ambiguous', candidates: exact };
   if (exact.length === 1) {
     const site = zoned(exact[0]);
     return site
@@ -192,7 +255,7 @@ export function chooseEntity(needle, candidates, { table }) {
   const prefix = entities.filter((e) => baseKey(e.legalName).startsWith(`${needle.base} `));
   const inZone = prefix.filter(zoned);
   if (inZone.length === 1) return { verdict: 'resolved', entity: inZone[0], site: zoned(inZone[0]), candidates: inZone };
-  if (inZone.length > 1) return { verdict: 'ambiguous', candidates: inZone };
+  if (inZone.length > 1) return brandPick(inZone, table) ?? { verdict: 'ambiguous', candidates: inZone };
   if (prefix.length > 0) return { verdict: 'out-of-zone', candidates: prefix };
   return { verdict: 'unresolved', candidates: [] };
 }
@@ -254,7 +317,7 @@ export function makeRegisterClient({ http, sleep = realSleep }) {
   };
 }
 
-function rowFor(item, verdict, picked, today) {
+export function rowFor(item, verdict, picked, today) {
   const row = {
     company: item.spelling, domain: item.domain ?? '', country: '', legal_name: '', entity_id: '', place: '', postcode: '',
     sector: '', size_band: '', verdict, candidates: '', checked: today,
@@ -268,6 +331,7 @@ function rowFor(item, verdict, picked, today) {
     row.postcode = site.postcode;
     row.sector = site.country === 'CH' ? (entity.purpose === 'strong' ? 'zefix-purpose:software' : '') : entity.sector;
     row.size_band = entity.sizeBand || '?';
+    if (picked.anchor === 'brand') row.candidates = formatCandidates(picked.candidates);
   } else if (verdict === 'ambiguous' || verdict === 'out-of-zone') {
     row.candidates = formatCandidates(picked.candidates);
   }
@@ -307,20 +371,30 @@ export async function resolveSpellings(spellings, ctx) {
   const toZefix = [...chFirst, ...frFirst.filter((i) => verdicts[i].verdict === 'unresolved')];
   if (toZefix.length > 0) {
     const servers = [...new Set(toZefix.map((i) => spellings[i].needle.server))];
-    const bindings = [];
-    for (let page = 0; ; page++) {
-      if (page >= MAX_PAGES) throw new Error(`candiboost: by-name query exceeds ${MAX_PAGES} pages (needles: ${servers.join(', ')})`);
-      const answer = await client.zefix(buildNameQuery(servers, page * PAGE));
-      const rows = answer?.results?.bindings ?? [];
-      bindings.push(...rows);
-      if (rows.length < PAGE) break;
-    }
-    const candidates = zefixCandidates(bindings);
+    const candidates = zefixCandidates(await zefixPaged(client, servers));
     for (const i of toZefix) {
       const { needle } = spellings[i];
       const own = candidates.filter((c) => c.needle === needle.server);
       const chosen = chooseEntity(needle, own, { table });
       if (chosen.verdict !== 'unresolved' || !frFirst.includes(i)) verdicts[i] = chosen;
+    }
+
+    const variants = new Map(toZefix.filter((i) => verdicts[i].verdict === 'unresolved').map((i) => [i, needleVariants(spellings[i].spelling)]));
+    const extra = [...new Set([...variants.values()].flat().map((v) => v.server))];
+    const found = [];
+    for (let at = 0; at < extra.length; at += NEEDLES_PER_QUERY) {
+      try {
+        found.push(...zefixCandidates(await zefixPaged(client, extra.slice(at, at + NEEDLES_PER_QUERY))));
+      } catch (e) {
+        if (e?.code !== 'PAGE_CAP') throw e;
+        ctx.log?.(`candiboost: variant query skipped: ${e.message}`);
+      }
+    }
+    for (const [i, list] of variants) {
+      for (const v of list) {
+        const chosen = chooseEntity(v, found.filter((c) => c.needle === v.server), { table });
+        if (chosen.verdict !== 'unresolved') { verdicts[i] = chosen; break; }
+      }
     }
   }
 
@@ -328,8 +402,32 @@ export async function resolveSpellings(spellings, ctx) {
     if (verdicts[i].verdict === 'unresolved' && !sireneDone.has(i)) await viaSirene(i);
   }
 
-  return spellings.map((item, i) => {
+  const rows = spellings.map((item, i) => {
     const picked = verdicts[i] ?? { verdict: 'unresolved', candidates: [] };
     return rowFor(item, picked.verdict, picked, today);
   });
+
+  if (typeof ctx.site === 'function') {
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].verdict !== 'unresolved') continue;
+      const item = spellings[i];
+      const patch = await ctx.site(item.spelling, { domain: item.domain ?? '', needle: item.needle, variants: needleVariants(item.spelling) }, ctx);
+      if (patch) rows[i] = { ...rows[i], ...patch };
+    }
+  }
+  return rows;
+}
+
+async function zefixPaged(client, servers) {
+  const bindings = [];
+  for (let page = 0; ; page++) {
+    if (page >= MAX_PAGES) {
+      throw Object.assign(new Error(`candiboost: by-name query exceeds ${MAX_PAGES} pages (needles: ${servers.join(', ')})`), { code: 'PAGE_CAP' });
+    }
+    const answer = await client.zefix(buildNameQuery(servers, page * PAGE));
+    const rows = answer?.results?.bindings ?? [];
+    bindings.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return bindings;
 }
