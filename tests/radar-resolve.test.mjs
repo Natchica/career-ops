@@ -509,6 +509,35 @@ test('brand rule: an out-of-zone operating entity does not anchor a brand', () =
   assert.equal(r.verdict, 'ambiguous');
 });
 
+test('brand rule: Apple anchors on the name closest to the brand, not on the nearest zone', () => {
+  const r = choose('Apple', [
+    zrow('Apple Hair-Design Sirikongkha & Co.', '4051', 'Basel'),
+    zrow('Apple Retail Switzerland GmbH', '8001', 'Zürich'),
+    zrow('Apple Switzerland AG', '8001', 'Zürich'),
+  ]);
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.anchor, 'brand');
+  assert.equal(r.entity.legalName, 'Apple Switzerland AG');
+});
+
+test('brand rule: fewer name tokens beat a better zone, zone breaks equal token counts', () => {
+  const r = choose('Foo', [zrow('Foo Bar Baz AG', '4051', 'Basel'), zrow('Foo Zug AG', '6330', 'Cham'), zrow('Foo Zurich AG', '8001', 'Zürich')]);
+  assert.equal(r.entity.legalName, 'Foo Zurich AG');
+});
+
+test('brand rule: a lone in-zone Hair entity next to an out-of-zone operating one still resolves by the single-prefix rule', () => {
+  assert.ok(NON_OPERATING_RE.test('Apple Hair-Design Sirikongkha & Co.'));
+  const r = choose('Apple', [zrow('Apple Hair-Design Sirikongkha & Co.', '4051', 'Basel'), zrow('Apple Switzerland AG', '2502', 'Biel/Bienne')]);
+  assert.equal(r.verdict, 'resolved');
+  assert.equal(r.anchor, undefined);
+  assert.equal(r.entity.legalName, 'Apple Hair-Design Sirikongkha & Co.');
+});
+
+test('brand rule: Hair and Coiffure entities are dropped, so a set of only those stays ambiguous', () => {
+  const r = choose('Apple', [zrow('Apple Hair-Design AG', '4051', 'Basel'), zrow('Apple Coiffure GmbH', '8001', 'Zürich')]);
+  assert.equal(r.verdict, 'ambiguous');
+});
+
 test('rowFor writes the candidates of a brand pick and the purpose-based sector', () => {
   const picked = choose('Foo', [zrow('Foo Basel AG', '4051', 'Basel', { uid: 'CHE111111111' }), zrow('Foo Zug AG', '6330', 'Cham', { uid: 'CHE222222222' })]);
   const row = rowFor({ spelling: 'Foo', domain: '' }, 'resolved', picked, TODAY);
