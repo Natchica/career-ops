@@ -60,6 +60,8 @@ test('the pending flow folds the companies into the Radar and names every step',
     'radar-tiers.mjs --write --summary',
     'candiboost-pending.mjs rematch',
     'candiboost-sync.mjs rematch',
+    'candiboost-resolve.mjs resettle',
+    'candiboost-resolve.mjs retry',
     'data/candiboost-resolved.tsv',
     'spontaneous-pick.mjs next',
   ]) assert.ok(mode.includes(needle), `modes/candiboost.md does not mention ${needle}`);
