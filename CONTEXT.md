@@ -47,7 +47,7 @@ A company recorded in the radar registry (`data/radar.tsv`) because it has at le
 _Avoid_: lead (a posting URL), target (implies the candidate chose it), company entry, account
 
 **Tier**:
-The rank 1, 2, 3 or out that `radar-tiers.mjs` gives a Prospect from its zone, country, tech signals and size, with a recorded reason. A Tier decides which Prospects a Spontaneous application may start from; it says nothing about whether the company is hiring.
+The rank 1, 2, 3 or out that `radar-tiers.mjs` gives a Prospect from its zone, country, tech signals and size, with a recorded reason. A Tier decides which Prospects a Spontaneous application may start from; it says nothing about whether the company is hiring. A Prospect known only from a GitHub organisation is an unverified employer and is Tier 2 at most; one whose name marks a research group, lab or school is out.
 _Avoid_: score (reserved for evaluated postings), priority, grade
 
 **Radar**:
@@ -67,7 +67,7 @@ A company listed on the candidate's Candiboost campaign that has not been mailed
 _Avoid_: pending company (collides with tracker statuses), candidate (the person), target
 
 **Resolution**:
-The register lookup that turns a Candiboost spelling into one legal entity with a seat: Zefix (CH) or SIRENE (FR), by name, never guessed. Recorded once per spelling in `data/candiboost-resolved.tsv` with a verdict: `resolved`, `out-of-zone`, `ambiguous` (the candidate picks the entity by hand), `unresolved` (no register entry) or `hand` (the candidate typed the place).
+The register lookup that turns a Candiboost spelling into one legal entity with a seat: Zefix (CH) or SIRENE (FR), by name, never guessed; when the registers fail, the company's own website, whose Impressum or contact page names an in-zone address. Recorded once per spelling in `data/candiboost-resolved.tsv` with a verdict: `resolved` (register entity in zone; a brand with several operating entities resolves to the brand), `site` (the website named an in-zone address), `out-of-zone`, `ambiguous` (the candidate picks the entity by hand), `unresolved` (nothing placed it) or `hand` (the candidate typed the place).
 _Avoid_: match (the base-key index lookup in `lib/candiboost.mjs`), geocoding, enrichment (reserved for `radar-enrich.mjs` hints)
 
 **Brief**:
