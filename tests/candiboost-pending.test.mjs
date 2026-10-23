@@ -293,3 +293,21 @@ test('rematch without a list exits 1 and creates nothing', () => {
 test('--help names rematch', () => {
   assert.match(run(sandbox(), ['--help']).stdout, /rematch/);
 });
+
+test('rank names an ambiguous Radar match and reads a site resolution as not in the Radar yet', () => {
+  const root = sandbox({
+    rows: [prospect({ key: 'twin|ch|basel', name: 'Twin AG' }), prospect({ key: 'twin|fr|colmar', name: 'Twin SA' })],
+  });
+  writeFileSync(join(root, 'data', 'candiboost-resolved.tsv'), serializeTable({
+    columns: [...RESOLVED_COLUMNS],
+    rows: [
+      { company: 'Twin', verdict: 'resolved', candidates: '' },
+      { company: 'Webby', verdict: 'site', candidates: '' },
+    ],
+  }));
+  ingest(root, ['Twin', 'Webby'].map((company) => ({ company, status: 'En attente' })));
+  const out = JSON.parse(run(root, ['rank']).stdout);
+  const reasons = Object.fromEntries(out.notWorkable.map((x) => [x.company, x.reason]));
+  assert.equal(reasons.Twin, 'Radar match ambiguous (2 rows): fill radar_key in data/candiboost-pending.tsv');
+  assert.equal(reasons.Webby, 'resolved, not in the Radar yet: run radar.mjs --source candiboost --write, then rematch');
+});
