@@ -49,9 +49,20 @@ test('the pending flow reads every page of the "En attente" filter into /tmp/can
   assert.ok(mode.includes('"En attente"'), 'names the status filter');
   assert.ok(mode.includes('/tmp/candiboost-pending.json'), 'names the hand-off file');
   assert.match(mode, /every page/);
-  assert.ok(mode.includes('`[{company, status}]`'), 'names the JSON shape');
+  assert.ok(mode.includes('`[{company, domain, status}]`'), 'names the JSON shape');
   assert.ok(mode.includes('browser_navigate'), 'navigates with Playwright');
   assert.match(mode, /candidate gives the page URL/);
+});
+
+test('the pending flow folds the companies into the Radar and names every step', () => {
+  for (const needle of [
+    'radar.mjs --source candiboost --write --summary',
+    'radar-tiers.mjs --write --summary',
+    'candiboost-pending.mjs rematch',
+    'candiboost-sync.mjs rematch',
+    'data/candiboost-resolved.tsv',
+    'spontaneous-pick.mjs next',
+  ]) assert.ok(mode.includes(needle), `modes/candiboost.md does not mention ${needle}`);
 });
 
 test('spontaneous tells the candidate to delete the Candiboost row and never clicks it', () => {
