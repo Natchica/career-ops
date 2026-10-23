@@ -218,3 +218,17 @@ test('a Prospect whose Candiboost alias is tracked counts as tracked', () => {
   assert.equal(makeTrackedCheck(['dormakaba'])(row), true);
   assert.equal(makeTrackedCheck(['dormakaba'])({ ...row, aliases: '#uid:CHE1' }), false);
 });
+
+test('each pick carries its source tokens, signal sub-tokens dropped, and --summary ends the line with them', () => {
+  const root = sandbox({
+    rows: [prospect({ key: 'z1', name: 'Zed', sources: 'zefix;zefix:software;candiboost', sites: 'Basel:B', country: 'CH' })],
+  });
+  assert.deepEqual(JSON.parse(pick(root, ['next']).stdout).picks[0].sources, ['zefix', 'candiboost']);
+  assert.match(pick(root, ['next', '--summary']).stdout, /· sources: zefix, candiboost$/m);
+});
+
+test('a pick without sources prints no sources suffix', () => {
+  const root = sandbox({ rows: [prospect({ key: 'n1', name: 'Nosrc', sources: '' })] });
+  assert.deepEqual(JSON.parse(pick(root, ['next']).stdout).picks[0].sources, []);
+  assert.doesNotMatch(pick(root, ['next', '--summary']).stdout, /sources:/);
+});
