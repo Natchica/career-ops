@@ -74,13 +74,13 @@ function fakeClient({ zefix = () => [], sirene = () => ({ results: [] }) } = {})
   };
 }
 
-function makeCtx(root, client = fakeClient()) {
+function makeCtx(root, client = fakeClient(), { site = null } = {}) {
   const logs = [];
   return {
     logs,
     client,
     ctx: {
-      dataRoot: root, table, today: '2026-10-23', client, log: (m) => logs.push(m),
+      dataRoot: root, table, today: '2026-10-23', client, site, log: (m) => logs.push(m),
       http: { fetchJson: async () => { throw new Error('network is off'); } }, sleep: async () => {},
     },
   };
@@ -209,7 +209,7 @@ test('yields resolved and hand rows only, logs the count per verdict', async () 
   const { ctx, logs } = makeCtx(root);
   const records = [];
   for await (const record of source.fetch(ctx)) {
-    assert.ok(logs.includes('candiboost: resolved 1 · hand 1 · out-of-zone 1 · ambiguous 1 · unresolved 2'), 'verdict log precedes the first record');
+    assert.ok(logs.includes('candiboost: resolved 1 · site 0 · hand 1 · out-of-zone 1 · ambiguous 1 · unresolved 2'), 'verdict log precedes the first record');
     records.push(record);
   }
   assert.deepEqual(records.map((r) => r.name), ['Alpha AG', 'Hand']);
@@ -358,4 +358,84 @@ test('radar.mjs --source candiboost --write folds a resolved row without network
   assert.ok(row.aliases.split(';').includes('ABF Informatik'));
   assert.ok(row.aliases.split(';').includes('#uid:CHE123456789'));
   assert.equal(row.sites, 'Zug:D');
+});
+
+const siteRow = (over = {}) => resolvedRow({
+  company: 'Kobold', domain: 'koboldgames.ch', country: 'CH', legal_name: 'Kobold Games GmbH', entity_id: 'site:koboldgames.ch',
+  place: 'Allschwil', postcode: '4123', size_band: '?', verdict: 'site',
+  candidates: formatCandidates([cand('Kobold Games GmbH', 'Allschwil', '4123', 'site:koboldgames.ch')]), ...over,
+});
+const coopCandidates = formatCandidates([
+  cand('Coop Pronto AG', 'Allschwil', '4123', 'uid:CHE108095223'),
+  cand('Coop Genossenschaft', 'Basel', '4002', 'uid:CHE105995233'),
+]);
+const brandRow = (over = {}) => resolvedAt('Coop', { legal_name: 'Coop Pronto AG', entity_id: 'uid:CHE108095223', place: 'Allschwil', postcode: '4123', candidates: coopCandidates, ...over });
+
+test('a site row is yielded under its legal name, counted, and never promoted', async () => {
+  const root = sandbox();
+  writePending(root, [{ company: 'Kobold' }]);
+  writeResolved(root, [siteRow()]);
+  const { ctx, logs } = makeCtx(root);
+  const records = await run(ctx);
+  assert.ok(logs.includes('candiboost: resolved 0 · site 1 · hand 0 · out-of-zone 0 · ambiguous 0 · unresolved 0'));
+  assert.deepEqual(records, [{
+    name: 'Kobold Games GmbH', legalName: 'Kobold Games GmbH', aliases: ['Kobold'], entityId: 'site:koboldgames.ch',
+    place: 'Allschwil', postcode: '4123', country: 'CH', sector: undefined, sizeBand: '?', sourceId: 'candiboost', signalTokens: [],
+  }]);
+  assert.equal(promote(siteRow(), table), null);
+});
+
+test('a brand row is named after the spelling and keeps its legal name', async () => {
+  const root = sandbox();
+  writePending(root, [{ company: 'Coop' }, { company: 'gruner ag, gebäudetechnik basel' }]);
+  writeResolved(root, [
+    brandRow(),
+    resolvedAt('gruner ag, gebäudetechnik basel', {
+      legal_name: 'Gruner AG', entity_id: 'uid:CHE100000001',
+      candidates: formatCandidates([cand('Gruner AG', 'Basel', '4051', 'uid:CHE100000001'), cand('Gruner AG', 'Basel', '4052', 'uid:CHE100000002')]),
+    }),
+  ]);
+  const { ctx } = makeCtx(root);
+  const [coop, gruner] = await run(ctx);
+  assert.equal(coop.name, 'Coop');
+  assert.equal(coop.legalName, 'Coop Pronto AG');
+  assert.equal(gruner.name, 'gruner ag');
+  assert.equal(gruner.legalName, 'Gruner AG');
+});
+
+test('a site hook sees the domain of an unresolved pending row and its patch is stored', async () => {
+  const root = sandbox();
+  writePending(root, [{ company: 'Kobold', domain: 'koboldgames.ch' }]);
+  const seen = [];
+  const site = async (spelling, info) => {
+    seen.push({ spelling, ...info });
+    return { verdict: 'site', country: 'CH', legal_name: 'Kobold Games GmbH', entity_id: 'site:koboldgames.ch', place: 'Allschwil', postcode: '4123', size_band: '?', candidates: '' };
+  };
+  const { ctx } = makeCtx(root, fakeClient(), { site });
+  const records = await run(ctx);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].spelling, 'Kobold');
+  assert.equal(seen[0].domain, 'koboldgames.ch');
+  assert.equal(readResolved(root).rows[0].verdict, 'site');
+  assert.equal(records[0].entityId, 'site:koboldgames.ch');
+});
+
+test('radar.mjs --source candiboost --write folds a brand row under the spelling key', () => {
+  const root = sandbox();
+  writePending(root, [{ company: 'Coop' }]);
+  writeResolved(root, [brandRow()]);
+  const r = spawnSync(process.execPath, [join(ROOT, 'radar.mjs'), '--source', 'candiboost', '--write'], {
+    cwd: root,
+    encoding: 'utf-8',
+    timeout: 60_000,
+    env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', CAREER_OPS_PORTALS: '', CAREER_OPS_SCAN_HISTORY: '' },
+  });
+  assert.equal(r.error, undefined, r.error?.message);
+  assert.equal(r.status, 0, r.stderr);
+  const rows = parseRegistry(readFileSync(join(root, 'data', 'radar.tsv'), 'utf-8')).rows;
+  const row = rows.find((e) => e['key'] === 'coop');
+  assert.ok(row, `rows: ${rows.map((e) => e['key'])}`);
+  assert.ok(row.aliases.split(';').includes('Coop Pronto AG'));
+  assert.ok(row.aliases.split(';').includes('#uid:CHE108095223'));
+  assert.equal(row.sites, 'Allschwil:B');
 });
