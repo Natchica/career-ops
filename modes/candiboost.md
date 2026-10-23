@@ -13,7 +13,7 @@ Gmail is read-only (`gmail.readonly`): the scripts never send, label, archive or
 | Input | What happens |
 | ----- | ------------ |
 | `candiboost sync` | Dry-run with `--summary` first, show the counts, run the real sync only on the candidate's yes, then list the bounced and replied sends |
-| `candiboost pending` | `browser_navigate` to the candidate's Candiboost page, `browser_snapshot`, collect every "En attente" row as `{company, status}` into `/tmp/candiboost-pending.json`, then `ingest --summary` and `rank --summary`. Not logged in: say so and stop |
+| `candiboost pending` | `browser_navigate` to the candidate's Candiboost page, `browser_snapshot`, collect every "En attente" row as `{company, domain, status}` into `/tmp/candiboost-pending.json`, then `ingest`, fold the companies into the Radar and `rank --summary`. Not logged in: say so and stop |
 | `candiboost follow [domain]` | `pick --summary` (or `pick --domain`), the candidate chooses |
 | `candiboost followed <thread_id>` | Record the follow-up after the candidate confirms the send |
 | `candiboost template` | Rewrite the Candiboost template |
@@ -31,10 +31,15 @@ Gmail is read-only (`gmail.readonly`): the scripts never send, label, archive or
 2. Use `browser_navigate` to open it and `browser_snapshot` to read it. If a login page shows, say the candidate has to log in once in that browser, and stop.
 3. The table "Mes candidatures spontanées" has the columns ENTREPRISE, CONTACT CIBLE, POSTE, ENVOYÉE, STATUT, CANDIDATURE and LINKEDIN, and the filters Toutes, Programmé, Envoyé, Ouvert and En attente. Apply the "En attente" filter. It is a view filter: it changes nothing in the campaign.
 4. The table shows 10 rows per page with numbered pagination ("Affichage de 121 à 130 sur 428 candidatures"). Read every page by following the pagination links, until the count in that line is reached. A pending row shows the company name only, the contact "—", the status "En attente", "En recherche de contact", and a trash button: never click it.
-5. Write `/tmp/candiboost-pending.json` as `[{company, status}]`, one object per row, the company exactly as the page shows it.
-6. Run `node candiboost-pending.mjs ingest /tmp/candiboost-pending.json`, then `node candiboost-pending.mjs rank --summary`. Show the picks (default 2) and ask which one to work.
-7. For the chosen company, run the full `modes/spontaneous.md` flow with its Radar key. A pending company with no Radar key cannot go through `spontaneous <key>`: say so and offer the next pick.
-8. After the candidate sends it, tell them which row to delete in Candiboost (`deleteRow`) so the company receives one mail. The candidate deletes it. Never click it yourself.
+5. Write `/tmp/candiboost-pending.json` as `[{company, domain, status}]`, one object per row, the company exactly as the page shows it. The domain is the second line of the ENTREPRISE cell, the domain shown beneath the company name.
+6. Run `node candiboost-pending.mjs ingest /tmp/candiboost-pending.json`.
+7. Fold the companies into the Radar with `node radar.mjs --source candiboost --write --summary`. The register lookups are paced (LINDAS answers one request per 3 seconds), so a first run can take 20 to 40 minutes: tell the candidate before you start. The source also writes `data/candiboost-resolved.tsv`, in preview too.
+8. Run `node radar-tiers.mjs --write --summary`, then `node candiboost-pending.mjs rematch` and `node candiboost-sync.mjs rematch`. Each `rematch` refills only `radar_key` and never clears one.
+9. Run `node candiboost-pending.mjs rank --summary`. It picks tier 1 and 2 companies only and lists every other pending row under `not workable` with its reason. Show the picks (default 2) and ask which one to work. The daily list for first mails is `node spontaneous-pick.mjs next --summary`; follow-ups stay `candiboost follow`.
+10. For the chosen company, run the full `modes/spontaneous.md` flow with its Radar key. A pending company with no Radar key cannot go through `spontaneous <key>`: say so and offer the next pick.
+11. After the candidate sends it, tell them which row to delete in Candiboost (`deleteRow`) so the company receives one mail. The candidate deletes it. Never click it yourself.
+
+`data/candiboost-resolved.tsv` holds one verdict per Candiboost spelling, with the columns `company`, `domain`, `country`, `legal_name`, `entity_id`, `place`, `postcode`, `sector`, `size_band`, `verdict`, `candidates` and `checked`. The verdicts are `resolved`, `out-of-zone`, `ambiguous`, `unresolved` and `hand`. Only `resolved` and `hand` rows become Prospects. The candidate settles an `ambiguous` row by editing `entity_id`, which must be one of the listed candidates with an in-zone seat, or places a public body by editing `place`. Deleting a row forces a new lookup on the next run.
 
 ## follow
 
