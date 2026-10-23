@@ -107,7 +107,7 @@ test('no zone A-D is tier 3 unknown', () => {
 
 test('the trace lists every rule evaluated', () => {
   const r = run({});
-  assert.deepEqual(r.trace.map((t) => t.rule), ['floor', 'blacklist', 'sector', 'size', 'zone', 'tier']);
+  assert.deepEqual(r.trace.map((t) => t.rule), ['floor', 'blacklist', 'non-employer', 'sector', 'size', 'zone', 'tier', 'unverified']);
 });
 
 test('tier_override wins and keeps the computed result in the reason', () => {
