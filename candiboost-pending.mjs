@@ -4,11 +4,13 @@
  *
  *   node candiboost-pending.mjs ingest <json>
  *   node candiboost-pending.mjs rank [--count N] [--summary]
+ *   node candiboost-pending.mjs rematch
  *
  * `ingest` replaces data/candiboost-pending.tsv with the "En attente" rows the
- * agent read from the Candiboost page (`[{company, status}]`). `rank` is
- * read-only: it lists the best pending companies to personalise by hand. No
- * network, no model. The Candiboost page is untrusted data. See modes/candiboost.md.
+ * agent read from the Candiboost page (`[{company, domain, status}]`). `rank` is
+ * read-only: it lists the best tier 1 and 2 pending companies to personalise by
+ * hand, and the rows that are not workable with the reason. `rematch` refills
+ * `radar_key` only. No network, no model. The Candiboost page is untrusted data. See modes/candiboost.md.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -23,17 +25,22 @@ import { CLI_EXIT, normalizeCompany } from './tracker-utils.mjs';
 import { readRegistry, registryPath } from './radar/registry.mjs';
 import { parseSpontaneous } from './radar/tiers.mjs';
 import {
-  PENDING_COLUMNS, buildProspectIndex, findTrackedRow, readTable, updateTable,
+  PENDING_COLUMNS, RESOLVED_COLUMNS, buildProspectIndex, findTrackedRow, readTable, updateTable,
 } from './lib/candiboost.mjs';
+import { parseCandidates } from './radar/resolve.mjs';
 
-const USAGE = `Usage: node candiboost-pending.mjs <ingest|rank> [options]
+const USAGE = `Usage: node candiboost-pending.mjs <ingest|rank|rematch> [options]
 
   ingest <json>
       Replace data/candiboost-pending.tsv with the "En attente" rows of <json>,
-      an array of {company, status} read from the Candiboost page.
+      an array of {company, domain, status} read from the Candiboost page.
   rank [--count N] [--summary]
-      The best pending companies to personalise (default 2, max 10), each with
-      the Candiboost row to delete after sending. Read-only.
+      The best tier 1 and 2 pending companies to personalise (default 2, max
+      10), each with the Candiboost row to delete after sending, then the rows
+      that are not workable with the reason. Read-only.
+  rematch
+      Refill radar_key from the Radar, after the Radar gained the Candiboost
+      spellings. Never renames a company and never clears a key.
 
 Options:
   --count <n>   Picks to show for \`rank\` (1-10, default 2)
@@ -66,8 +73,16 @@ const fold = (text) => collapse(text).normalize('NFD').replace(/\p{M}+/gu, '').t
 /** True for the Candiboost status "En attente", ignoring case and accents. */
 export const isPendingStatus = (status) => fold(status) === 'en attente';
 
+/** A page-read domain as `host.tld`, lower-case, or '' when it is not one. */
+export function cleanDomain(value) {
+  const host = collapse(value).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/?#].*$/, '');
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : '';
+}
+
 /**
- * The distinct pending companies of a page read, whitespace collapsed.
+ * The distinct pending companies of a page read, whitespace collapsed, each
+ * with its cleaned domain.
+ * @returns {{company: string, domain: string}[]}
  * @throws {Error} when the input is not an array of `{company, status}` objects
  */
 export function pendingCompanies(input) {
@@ -81,7 +96,7 @@ export function pendingCompanies(input) {
     const key = normalizeCompany(company) || company.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
-    out.push(company);
+    out.push({ company, domain: cleanDomain(item.domain) });
   });
   return out;
 }
@@ -108,32 +123,47 @@ async function runIngest(args, root) {
   const receipt = await updateTable(join(root, 'data', 'candiboost-pending.tsv'), SPEC, (fresh) => {
     const firstSeen = new Map(fresh.rows.map((r) => [normalizeCompany(r.company) || r.company.toLowerCase(), r.first_seen]));
     let kept = 0;
-    const rows = companies.map((company) => {
+    const rows = companies.map(({ company, domain }) => {
       const key = normalizeCompany(company) || company.toLowerCase();
       const prior = firstSeen.get(key);
       if (prior !== undefined) kept++;
       return {
         company,
-        radar_key: index.match(company, '').row?.key ?? '',
+        domain,
+        radar_key: index.match(company, domain).row?.key ?? '',
         first_seen: prior || today,
         last_seen: today,
       };
     });
-    return { rows, result: { new: rows.length - kept, kept, dropped: fresh.rows.length - kept, total: rows.length } };
+    const columns = [...fresh.columns, ...PENDING_COLUMNS.filter((c) => !fresh.columns.includes(c))];
+    return { columns, rows, result: { new: rows.length - kept, kept, dropped: fresh.rows.length - kept, total: rows.length } };
   });
   console.log(JSON.stringify(receipt));
 }
 
-const TIER_ORDER = { 1: 1, 2: 2, 3: 3 };
-const tierRank = (tier) => TIER_ORDER[tier] ?? 4;
+const NOT_IN_RADAR_YET = 'resolved, not in the Radar yet: run radar.mjs --source candiboost --write, then rematch';
+
+function unmatchedReason(resolution) {
+  if (!resolution) return 'no resolution yet';
+  if (resolution.verdict === 'resolved' || resolution.verdict === 'hand') return NOT_IN_RADAR_YET;
+  if (resolution.verdict === 'ambiguous') return 'ambiguous: fill entity_id in data/candiboost-resolved.tsv';
+  if (resolution.verdict === 'out-of-zone') {
+    const places = [...new Set(parseCandidates(resolution.candidates).map((c) => c.place).filter(Boolean))].slice(0, 3);
+    return places.length ? `out-of-zone: ${places.join(', ')}` : 'out-of-zone';
+  }
+  if (resolution.verdict === 'unresolved') return 'unresolved';
+  return 'no resolution yet';
+}
 
 /**
- * Rank pending rows: untracked, not blacklisted, not marked for Spontaneous, not
- * tier out; tier 1 before 2 before 3 before unmatched, ties by name.
+ * Rank pending rows: untracked, not blacklisted, not marked for Spontaneous, and
+ * in tier 1 or 2 (1 before 2, ties by name). Every other such row goes to
+ * `notWorkable` with its reason.
  */
-export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, count = 2 }) {
+export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, resolutionFor = () => null, count = 2 }) {
   const excluded = { tracked: 0, blacklisted: 0, marked: 0, out: 0 };
   const eligible = [];
+  const notWorkable = [];
   for (const row of rows) {
     const radar = radarByKey.get(row.radar_key) ?? null;
     const names = [row.company, radar?.name,
@@ -141,10 +171,14 @@ export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, coun
     if (findTrackedRow(names, trackerRows)) { excluded.tracked++; continue; }
     if (names.filter(Boolean).some(isBlacklisted)) { excluded.blacklisted++; continue; }
     if (radar && parseSpontaneous(radar.spontaneous).state !== 'none') { excluded.marked++; continue; }
-    if (radar?.tier === 'out') { excluded.out++; continue; }
-    eligible.push({ row, tier: radar?.tier || null });
+    if (!radar) { notWorkable.push({ company: row.company, reason: unmatchedReason(resolutionFor(row.company)) }); continue; }
+    if (radar.tier === '1' || radar.tier === '2') { eligible.push({ row, tier: radar.tier }); continue; }
+    if (radar.tier === 'out') { excluded.out++; notWorkable.push({ company: row.company, reason: `tier out: ${radar.tier_reason}` }); continue; }
+    if (radar.tier === '3') { notWorkable.push({ company: row.company, reason: `tier 3: ${radar.tier_reason}` }); continue; }
+    notWorkable.push({ company: row.company, reason: 'no tier yet: run node radar-tiers.mjs --write' });
   }
-  eligible.sort((a, b) => tierRank(a.tier) - tierRank(b.tier) || a.row.company.localeCompare(b.row.company));
+  eligible.sort((a, b) => Number(a.tier) - Number(b.tier) || a.row.company.localeCompare(b.row.company));
+  notWorkable.sort((a, b) => a.company.localeCompare(b.company));
   const picks = eligible.slice(0, count).map(({ row, tier }, i) => ({
     rank: i + 1,
     company: row.company,
@@ -152,17 +186,19 @@ export function rankPending(rows, { radarByKey, trackerRows, isBlacklisted, coun
     tier,
     deleteRow: row.company,
   }));
-  return { picks, excluded, eligible: eligible.length, total: rows.length };
+  return { picks, excluded, eligible: eligible.length, notWorkable, total: rows.length };
 }
 
 function renderRank(out) {
   const ex = out.excluded;
   const lines = [`Candiboost pending — ${out.eligible} eligible of ${out.total}; excluded: ${ex.tracked} tracked, ${ex.blacklisted} blacklisted, ${ex.marked} marked, ${ex.out} tier out`];
   for (const p of out.picks) {
-    lines.push(`  ${p.rank}. ${p.company} — ${p.radar_key ? `tier ${p.tier ?? 'none'} (${p.radar_key})` : 'not in the Radar'}`);
+    lines.push(`  ${p.rank}. ${p.company} — tier ${p.tier} (${p.radar_key})`);
     lines.push(`     after you send it, delete the row "${p.deleteRow}" in Candiboost`);
   }
   if (out.picks.length === 0) lines.push('  nothing eligible');
+  lines.push(`not workable: ${out.notWorkable.length}`);
+  for (const n of out.notWorkable) lines.push(`  - ${n.company}: ${n.reason}`);
   return lines.join('\n');
 }
 
@@ -178,13 +214,37 @@ function runRank(args, root) {
   if (pending.missing) fail('no pending list: run candiboost-pending.mjs ingest <json> first');
   const radarByKey = new Map(readRegistry(registryPath(root)).rows.map((r) => [r.key, r]));
   const blacklist = loadBlacklist(join(root, 'data', 'blacklist.md'));
+  const resolved = readTable(join(root, 'data', 'candiboost-resolved.tsv'), { key: 'company', columns: RESOLVED_COLUMNS });
+  const resolutions = new Map(resolved.rows.map((r) => [r.company, r]));
   const out = rankPending(pending.rows, {
     radarByKey,
     trackerRows: readTrackerRows(root),
     isBlacklisted: (name) => findBlacklistEntry(blacklist, name, '') !== null,
+    resolutionFor: (company) => resolutions.get(company) ?? null,
     count,
   });
   console.log(args.includes('--summary') ? renderRank(out) : JSON.stringify(out, null, 2));
+}
+
+async function runRematch(root) {
+  const path = join(root, 'data', 'candiboost-pending.tsv');
+  if (readTable(path, SPEC).missing) fail('no pending list: run candiboost-pending.mjs ingest <json> first');
+  const index = buildProspectIndex(readRegistry(registryPath(root)).rows);
+  const receipt = await updateTable(path, SPEC, (fresh) => {
+    let matched = 0;
+    let unmatched = 0;
+    let changed = 0;
+    const rows = fresh.rows.map((row) => {
+      const hit = index.match(row.company, row.domain ?? '').row;
+      if (!hit) { unmatched++; return row; }
+      matched++;
+      if (hit.key === row.radar_key) return row;
+      changed++;
+      return { ...row, radar_key: hit.key };
+    });
+    return { rows, result: { matched, unmatched, changed } };
+  });
+  console.log(JSON.stringify(receipt));
 }
 
 async function main(args) {
@@ -193,7 +253,8 @@ async function main(args) {
   const [command] = positionals(args);
   if (command === 'ingest') await runIngest(args, root);
   else if (command === 'rank') runRank(args, root);
-  else fail('first argument must be ingest or rank (see --help)');
+  else if (command === 'rematch') await runRematch(root);
+  else fail('first argument must be ingest, rank or rematch (see --help)');
 }
 
 if (isMainModule(import.meta.url)) {
