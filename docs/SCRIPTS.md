@@ -304,7 +304,7 @@ The offline half — *which enabled entries does no provider claim?* — is pure
 
 Census of the employers with a site in commute zones A to D. It names companies and does nothing else with them: no evaluation, screening, scoring or contact, and it never writes `portals.yml`, `data/pipeline.md` or the tracker. Each employer becomes one Prospect (one brand or group, in-zone sites listed) in `data/radar.tsv`. Zone E and remote are out. The Radar is local only. Full detail: `modes/radar.md`.
 
-Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `zefix` (Swiss firms whose registered purpose is software, from the open-data copy on LINDAS under its fair-use rules), `github-orgs` (organisations only, token optional), `directories` (documents the vetted candidates and enables none), and `candiboost` (the Candiboost pending rows and sends, looked up by name in Zefix or SIRENE). The `candiboost` register lookups are paced, LINDAS at one request per 3 seconds, so `node radar.mjs --source candiboost --write --summary` can take 20 to 40 minutes. The source keeps one verdict per spelling in `data/candiboost-resolved.tsv` and writes it in preview too; see `DATA_CONTRACT.md`. Preview is the default; nothing is written without `--write`.
+Sources live in `radar/sources/`: `ats-employers` (from `data/scan-history.tsv`), `sirene` (French register, by postcode), `zefix` (Swiss firms whose registered purpose is software, from the open-data copy on LINDAS under its fair-use rules), `github-orgs` (organisations only, token optional), `directories` (documents the vetted candidates and enables none), and `candiboost` (the Candiboost pending rows and sends, looked up by name in Zefix or SIRENE). The `candiboost` register lookups are paced, LINDAS at one request per 3 seconds, so `node radar.mjs --source candiboost --write --summary` can take 20 to 40 minutes. A spelling that finds nothing is looked up again under name variants (without a legal form or a trailing word), then on the company's own website (`radar/site.mjs`): a known domain is trusted, guessed domains (`{name}.ch`, `{name}.com`) count only when the page's legal name or title matches, `robots.txt` is honoured, sites are read 1 second apart, at most 2 pages per domain, with the User-Agent `career-ops-radar`. The source keeps one verdict per spelling in `data/candiboost-resolved.tsv` and writes it in preview too; see `DATA_CONTRACT.md`. Preview is the default; nothing is written without `--write`.
 
 ```bash
 node radar.mjs --sources                          # sources with auth state and last save (JSON)
@@ -332,6 +332,8 @@ node radar-tiers.mjs --summary           # preview: counts per tier and reason, 
 node radar-tiers.mjs --write --summary   # persist tier and tier_reason
 node radar-tiers.mjs --explain acme      # rule trace and rank inside the tier for one Prospect
 ```
+
+Two optional keys shape the gate. `unverified_sources` (default `[github-orgs]`) names the sources that never confirm a company exists: a Prospect known only from them, with no register id and no board, is tier 2 at most, whatever its signals; `[]` turns the cap off. `hard_out.non_employer_patterns` lists `{pattern, label}` regexes (ETH, FHNW, university, institute, research group, laboratory) that put an unverified Prospect out as `out non-employer: {label}`.
 
 Re-run `--write` after every `radar.mjs --write`: new rows have no tier yet. A second `--write` on an unchanged registry reports `"changed": 0`.
 
@@ -405,6 +407,22 @@ node candiboost-pending.mjs rank --count 5                        # 1 to 10 pick
 `ingest` folds duplicates, stores the domain, matches each company to the Radar by name, alias or domain label, keeps `first_seen` for rows that survive and drops rows missing from the new read. `rank` leaves out tracked, blacklisted, `spontaneous`-marked and tier `out` companies, then picks tier 1 and 2 companies only, tier 1 first, ties by name. Every other pending row is listed under `not workable` with its reason: tier `out`, tier 3, no tier yet, or no Radar match. `rematch` fills only `radar_key` and never clears one.
 
 **Exit codes:** `0` on success; `1` on a usage error, an unreadable or malformed input file, or `rank` before any `ingest`.
+
+---
+
+## candiboost-resolve
+
+Repairs `data/candiboost-resolved.tsv` without a new fold. No network and no model. Rows with a filled `entity_id` or `place` are hand edits and are never touched.
+
+```bash
+node candiboost-resolve.mjs resettle --dry-run   # list the ambiguous rows the brand rule settles, write nothing
+node candiboost-resolve.mjs resettle             # settle them from their stored candidates
+node candiboost-resolve.mjs retry                # back up, then delete the unresolved rows
+```
+
+`resettle` drops non-operating entities from the stored `candidates`, then anchors on the entity with the fewest name tokens once the legal form is stripped, then the best zone, then the shortest legal name, then the entity id. It prints each pick, keeps the candidates, and leaves rows that do not settle byte-identical. `retry` copies the table to `data/backup-{date}-retry/` and deletes the `unresolved` rows, so the next `node radar.mjs --source candiboost --write --summary` looks them up again with name variants and the website layer. It refuses to run when that backup already exists. `--dry-run` prints the counts and writes nothing.
+
+**Exit codes:** `0` on success; `1` on a usage error, a missing or malformed resolution table, or an existing backup.
 
 ---
 
