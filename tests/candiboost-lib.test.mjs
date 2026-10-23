@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
-  PENDING_COLUMNS, REGISTRY_COLUMNS, additionTsv, buildProspectIndex, contactLine, extractCompany, findTrackedRow, parseTable,
+  PENDING_COLUMNS, REGISTRY_COLUMNS, RESOLVED_COLUMNS, additionTsv, buildProspectIndex, contactLine, extractCompany, findTrackedRow, parseTable,
   parseThread, planSync, readTable, serializeTable, updateTable,
 } from '../lib/candiboost.mjs';
 
@@ -155,7 +155,8 @@ const reg = (over) => ({ ...Object.fromEntries(REGISTRY_COLUMNS.map((c) => [c, '
 
 test('the column lists are the documented ones', () => {
   assert.deepEqual(REGISTRY_COLUMNS, ['thread_id', 'sent_at', 'domain', 'company', 'radar_key', 'to_email', 'contact_name', 'civility', 'status', 'tracker', 'followup']);
-  assert.deepEqual(PENDING_COLUMNS, ['company', 'radar_key', 'first_seen', 'last_seen']);
+  assert.deepEqual(PENDING_COLUMNS, ['company', 'domain', 'radar_key', 'first_seen', 'last_seen']);
+  assert.deepEqual(RESOLVED_COLUMNS, ['company', 'domain', 'country', 'legal_name', 'entity_id', 'place', 'postcode', 'sector', 'size_band', 'verdict', 'candidates', 'checked']);
 });
 
 test('readTable on a missing file is an empty table flagged missing', () => {
