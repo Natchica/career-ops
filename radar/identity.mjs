@@ -26,7 +26,7 @@ export const SOFTWARE_NAF = new Set([
   '63.11Z', '63.12Z',
 ]);
 
-const LEGAL_FORMS = [
+export const LEGAL_FORMS = [
   ['s', 'a', 'r', 'l'], ['s', 'a', 's', 'u'], ['s', 'a', 's'], ['s', 'a'],
   ['e', 'u', 'r', 'l'], ['e', 'k'],
   ['sarl'], ['sasu'], ['sas'], ['sa'], ['eurl'], ['sca'], ['scs'],
