@@ -9,7 +9,7 @@ import { needleFor } from '../radar/resolve.mjs';
 import {
   SITE_USER_AGENT, SITE_PACE_MS, SITE_TIMEOUT_MS, MAX_HOPS, WEBMAIL,
   decodeEntities, pageLines, titleOf, countryHint, guessDomains, impressumLink, addressPairs, legalNameNear,
-  readSite, siteResolve,
+  readSite, siteResolve, nameMatches, fetchSitePage,
 } from '../radar/site.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -238,4 +238,59 @@ test('siteResolve sanitises ; and # in the legal name', async () => {
   assert.equal(out.legal_name, 'Kobold, ,Games GmbH');
   assert.doesNotMatch(out.candidates.replace(' #site:', ''), /#/);
   assert.doesNotMatch(out.legal_name, /[;#]/);
+});
+
+test('nameMatches: the legal name or title must carry the needle as a whole name', () => {
+  assert.equal(nameMatches('Kobold Games GmbH', [needleFor('Kobold Games')]), true);
+  assert.equal(nameMatches('Kobold', [needleFor('Kobold Games')]), false);
+  assert.equal(nameMatches('', [needleFor('Kobold')]), false);
+});
+
+test('readSite with keepText returns the page texts and the robots text, and without it neither', async () => {
+  const kept = fakeCtx(site());
+  const r = await readSite('koboldgames.ch', kept.ctx, { keepText: true });
+  assert.deepEqual(r.texts, [
+    { url: 'https://koboldgames.ch/', html: HOME },
+    { url: 'https://koboldgames.ch/impressum', html: IMPRESSUM },
+  ]);
+  assert.equal(r.robots, '');
+  assert.deepEqual(kept.requests.map((q) => new URL(q.url).pathname), ['/robots.txt', '/', '/impressum']);
+
+  const plain = fakeCtx(site());
+  const p = await readSite('koboldgames.ch', plain.ctx);
+  assert.equal(Object.hasOwn(p, 'texts'), false);
+  assert.equal(Object.hasOwn(p, 'robots'), false);
+  assert.equal(Object.hasOwn(p, 'nxdomain'), false);
+
+  const blocked = fakeCtx(site({ robots: 'User-agent: *\nDisallow: /' }));
+  const b = await readSite('koboldgames.ch', blocked.ctx, { keepText: true });
+  assert.deepEqual(b.texts, []);
+});
+
+test('readSite with keepText tells a domain that does not exist from an outage', async () => {
+  const dns = (code) => () => Object.assign(new TypeError('fetch failed'), { cause: { code } });
+  const gone = await readSite('nowhere.ch', fakeCtx(dns('ENOTFOUND')).ctx, { keepText: true });
+  assert.equal(gone.nxdomain, true);
+  assert.equal(gone.robots, null);
+  assert.equal(gone.note, 'robots.txt unreachable');
+  assert.equal(gone.pages, 0);
+  const outage = await readSite('nowhere.ch', fakeCtx(dns('EAI_AGAIN')).ctx, { keepText: true });
+  assert.equal(outage.nxdomain, false);
+  const plain = await readSite('nowhere.ch', fakeCtx(dns('ENOTFOUND')).ctx);
+  assert.equal(Object.hasOwn(plain, 'nxdomain'), false);
+});
+
+test('fetchSitePage follows a same-site redirect politely and refuses an off-site one', async () => {
+  const hop = fakeCtx((url) => (new URL(url).hostname === 'acme.ch' ? httpError(301, 'https://www.acme.ch/karriere') : '<p>Jobs</p>'));
+  const page = await fetchSitePage('https://acme.ch/karriere', 'acme.ch', hop.ctx);
+  assert.equal(page.url.href, 'https://www.acme.ch/karriere');
+  assert.equal(page.text, '<p>Jobs</p>');
+  assert.deepEqual(hop.sleeps, [1000, 1000]);
+  for (const q of hop.requests) {
+    assert.equal(q.opts.headers['User-Agent'], SITE_USER_AGENT);
+    assert.equal(q.opts.timeoutMs, 10_000);
+    assert.equal(q.opts.redirect, 'manual');
+  }
+  const off = fakeCtx(() => httpError(302, 'https://evil.com/x'));
+  await assert.rejects(fetchSitePage('https://acme.ch/karriere', 'acme.ch', off.ctx), /redirects off-site to evil\.com/);
 });
