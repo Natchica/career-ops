@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import * as yaml from 'js-yaml';
+import { loadYaml } from '../lib/yaml-document.mjs';
 import { RadarConfigError, foldName, loadZoneTable } from './zones.mjs';
 import { hintScore } from './hints.mjs';
 import { splitList } from './identity.mjs';
@@ -104,7 +104,7 @@ export function loadTierRules({ dataRoot, codeRoot }) {
   }
   let doc;
   try {
-    doc = yaml.load(text);
+    doc = loadYaml(text);
   } catch (e) {
     throw new RadarConfigError(`${source}: ${e.message}`);
   }
