@@ -158,35 +158,47 @@ export function legalNameNear(lines, index) {
 }
 
 /**
+ * One polite page fetch: pace, identifying User-Agent, timeout, and same-site
+ * redirects only (at most MAX_HOPS). Throws on a fetch failure.
+ *
+ * @returns {Promise<{text:string, url:URL}>}
+ */
+export async function fetchSitePage(start, domain, ctx, { retries = 0 } = {}) {
+  let url = new URL(start);
+  for (let hop = 0; hop <= MAX_HOPS; hop++) {
+    await ctx.sleep(SITE_PACE_MS);
+    try {
+      const text = await fetchTextWithRetry(ctx.http, url.toString(), {
+        headers: { 'User-Agent': SITE_USER_AGENT }, timeoutMs: SITE_TIMEOUT_MS, redirect: 'manual',
+      }, { retries });
+      return { text, url };
+    } catch (e) {
+      if (typeof e?.status === 'number' && e.status >= 300 && e.status < 400 && e.location) {
+        const next = new URL(e.location, url);
+        if (!/^https?:$/.test(next.protocol) || !sameSite(next.hostname, domain)) throw new Error(`redirects off-site to ${next.host}`);
+        url = next;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error('too many redirects');
+}
+
+/**
  * Read a domain: robots.txt, the home page, then the best Impressum-like page.
  * Never throws for a fetch failure; the failure comes back as `note`.
+ * With `keepText` the result also carries `texts` (the pages read, home first),
+ * `robots` (the robots.txt text, or null when unreachable) and `nxdomain` (the
+ * name does not exist, as opposed to a network outage); callers that read the
+ * Candiboost resolution never ask for it.
  *
  * @returns {Promise<{domain:string, legalName:string, title:string, pair:object|null, pages:number, note:string}>}
  */
-export async function readSite(domain, ctx, { retries = 0 } = {}) {
+export async function readSite(domain, ctx, { retries = 0, keepText = false } = {}) {
   const result = { domain, legalName: '', title: '', pair: null, pages: 0, note: '' };
-
-  async function get(start) {
-    let url = new URL(start);
-    for (let hop = 0; hop <= MAX_HOPS; hop++) {
-      await ctx.sleep(SITE_PACE_MS);
-      try {
-        const text = await fetchTextWithRetry(ctx.http, url.toString(), {
-          headers: { 'User-Agent': SITE_USER_AGENT }, timeoutMs: SITE_TIMEOUT_MS, redirect: 'manual',
-        }, { retries });
-        return { text, url };
-      } catch (e) {
-        if (typeof e?.status === 'number' && e.status >= 300 && e.status < 400 && e.location) {
-          const next = new URL(e.location, url);
-          if (!/^https?:$/.test(next.protocol) || !sameSite(next.hostname, domain)) throw new Error(`redirects off-site to ${next.host}`);
-          url = next;
-          continue;
-        }
-        throw e;
-      }
-    }
-    throw new Error('too many redirects');
-  }
+  if (keepText) Object.assign(result, { texts: [], robots: null, nxdomain: false });
+  const get = (start) => fetchSitePage(start, domain, ctx, { retries });
 
   let robots = null;
   let origin = '';
@@ -199,8 +211,10 @@ export async function readSite(domain, ctx, { retries = 0 } = {}) {
       break;
     } catch (e) {
       if (e?.status === 404 || e?.status === 410) { robots = ''; origin = `https://${host}`; break; }
+      if (keepText && e?.cause?.code === 'ENOTFOUND') result.nxdomain = true;
     }
   }
+  if (keepText) result.robots = robots;
   if (robots === null) return { ...result, note: 'robots.txt unreachable' };
   if (!robotsAllows(robots, '/')) return { ...result, note: 'robots.txt disallows /' };
 
@@ -213,6 +227,7 @@ export async function readSite(domain, ctx, { retries = 0 } = {}) {
   result.pages = 1;
   result.title = titleOf(home.text);
   const pages = [{ html: home.text, lines: pageLines(home.text) }];
+  if (keepText) result.texts.push({ url: home.url.toString(), html: home.text });
 
   const link = impressumLink(home.text, home.url.toString());
   if (link && link !== home.url.toString() && robotsAllows(robots, new URL(link).pathname)) {
@@ -220,6 +235,7 @@ export async function readSite(domain, ctx, { retries = 0 } = {}) {
       const contact = await get(link);
       result.pages = 2;
       pages.unshift({ html: contact.text, lines: pageLines(contact.text) });
+      if (keepText) result.texts.push({ url: contact.url.toString(), html: contact.text });
     } catch { /* the home page already answered */ }
   }
 
@@ -237,7 +253,7 @@ export async function readSite(domain, ctx, { retries = 0 } = {}) {
 
 const clean = (s) => String(s ?? '').replace(/[;#]/g, ',').replace(/\s+/g, ' ').trim().slice(0, 80);
 
-function nameMatches(name, needles) {
+export function nameMatches(name, needles) {
   const key = baseKey(name);
   return needles.some((n) => n && (key === n.base || key.startsWith(`${n.base} `)));
 }
