@@ -34,6 +34,7 @@ table in `AGENTS.md` (mirrored in `CLAUDE.md`).
 | `cabinet.md` | `cabinet` | Search-firm channel: discover, vet, Brief, Consultant outreach, Mandate intake, Check-ins (draft-only) |
 | `radar.md` | `radar` | Census of the employers in your commute zones: names companies, nothing else (local only) |
 | `spontaneous.md` | `spontaneous` | Daily Spontaneous application to a Tier 1 Radar Prospect: live research, contact, no-JD CV and email draft (draft-only) |
+| `candiboost.md` | `candiboost` | Candiboost sends read back from Gmail Sent into the tracker, pending-list ranking, same-thread follow-up drafts (draft-only) |
 | `deep.md` | `deep` | Deep company-research prompt |
 | `interview.md` | `interview` | Interactive profile & CV onboarding |
 | `master-profile.md` | `master-profile` | Source-backed Master Career Profile import and review |
