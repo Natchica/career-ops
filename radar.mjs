@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { buildCompanyCanonicalizer } from './scan.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
@@ -95,7 +95,7 @@ function loadPortals(root) {
   const path = process.env.CAREER_OPS_PORTALS || join(root, 'portals.yml');
   if (!existsSync(path)) return {};
   try {
-    return yaml.load(readFileSync(path, 'utf-8')) || {};
+    return loadYaml(readFileSync(path, 'utf-8')) || {};
   } catch (e) {
     throw new Error(`${path}: ${e.message}`);
   }
