@@ -351,7 +351,11 @@ Adds relevance hints to the best Radar Prospects, so `spontaneous-pick next` can
 node radar-enrich.mjs --dry-run --summary          # probe the next 40 Prospects, write nothing
 node radar-enrich.mjs --limit 100 --zones A,B      # probe and persist (every 8 rows)
 node radar-enrich.mjs --key acme,globex --refresh  # re-probe named Prospects
+node radar-enrich.mjs --sites --dry-run --limit 3 --summary   # Site probe preview, 3 register-only Prospects, writes nothing
+node radar-enrich.mjs --sites --limit 40 --summary            # Site probe, zone B, persisted every 8 rows
 ```
+
+**Site probe (`--sites`).** The default probe needs a GitHub organisation or a `portals.yml` entry, which most register-only Prospects (Zefix or SIRENE entries) do not have. `--sites` selects exactly those (tier 1, untouched, no `#github:` alias, no `portals_ref`, no `checked:` token, zone B unless `--zones` says otherwise; add `--zones A` once for the few zone A firms). For each one it guesses up to 6 domains from the registered name (joined spellings of the name and of its trimmed forms such as "acme software solutions" then "acme", `.ch` then `.com`, then hyphenated), and reads each with `robots.txt` honoured, 1 second between requests, a 10 second timeout, same-site redirects only and at most 2 pages per domain. A domain is the firm's own site when its legal name or title carries the registered name, or its page text carries the full name as whole words together with a registered place; the first one wins. The `hints` cell then gets `web:{domain}` plus tokens from the home page and the second page (the Impressum when it was needed, otherwise the careers page): `site:software` (a strong phrase such as "Softwareentwicklung" or "custom software", not the bare word), `site:careers` (the home page links to a careers or jobs page), `site:placement` (staffing, temporary placement or body leasing wording), and the existing `site:java`, `site:rust` and `site:open-apps`. When no guessed domain verifies, the cell gets `site:none`. A domain that does not exist counts as an answer; a network outage does not, so nothing is marked `checked:` while offline. Each Prospect takes about 20 seconds, so 40 take about 15 minutes; `--dry-run` writes nothing and an interrupted run loses at most 7 rows. The score behind the ranking runs from -2 to 4: +1 each for open applications, a Java or Rust trace, software and careers, -1 for `site:none`, -2 for `site:placement`, so inside a zone and country group the order is confirmed good, then unprobed, then no site found. A `--refresh` or `--key` re-probe replaces the old `gh:`, `site:` and `web:` tokens, so do not run it offline. A Site probe never changes a tier and never decides that a firm suits you: the research step still re-reads the page.
 
 ---
 
@@ -366,6 +370,8 @@ node spontaneous-pick.mjs mark "acme" drafted             # drafted:YYYY-MM-DD
 node spontaneous-pick.mjs mark "acme" skipped --reason "no public info"
 node spontaneous-pick.mjs mark "acme" sent --tracker 123  # sent:YYYY-MM-DD:#123, checked against the tracker row
 ```
+
+Each pick shows ` · web: {domain}` when a Site probe verified the firm's website, or ` · no site found` when it tried and found none, and the JSON carries `web` and `hints`. `unprobed` counts the register-only Prospects among the first 30 eligible ones that no Site probe has read; above 15, `--summary` adds a line suggesting `node radar-enrich.mjs --sites --limit 40 --summary`.
 
 A Prospect is skipped by `next` when its `spontaneous` cell is not empty, its company is in the tracker, or it is in `data/blacklist.md`. `sent` is final, and `skipped` cannot become `sent`.
 
