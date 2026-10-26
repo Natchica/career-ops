@@ -10,8 +10,16 @@
  *   gh:java  gh:rust       a recent, non-fork GitHub repository in that stack
  *   site:java  site:rust   the home or careers page names that stack
  *   site:open-apps         the careers page invites unsolicited applications
+ *   site:software          the site describes building or selling software
+ *   site:careers           the home page links to a careers or jobs page
+ *   site:placement         the site offers staffing, temporary placement or body leasing
+ *   site:none              a Site probe tried every guessed domain and none verified
+ *   web:{domain}           the verified website of a register-only Prospect (Site probe)
  *   checked:YYYY-MM-DD     the Prospect was probed on that day (never scored)
  *
+ * `hintScore` runs from -2 to 4: +1 each for open applications, a stack trace,
+ * software and careers, -1 for no site, -2 for placement. An unprobed Prospect
+ * scores 0, so the order inside a zone is confirmed good, unprobed, no site.
  * Hints only order Prospects inside one zone and country group, so a Prospect
  * with a better zone is never overtaken by a hint.
  */
@@ -21,6 +29,10 @@ const RECENT_DAYS = 730;
 
 export const STACK_HINTS = Object.freeze(['gh:java', 'gh:rust', 'site:java', 'site:rust']);
 export const OPEN_APPS_HINT = 'site:open-apps';
+export const SOFTWARE_HINT = 'site:software';
+export const CAREERS_HINT = 'site:careers';
+export const PLACEMENT_HINT = 'site:placement';
+export const NO_SITE_HINT = 'site:none';
 
 const OPEN_APPS = new RegExp([
   'initiativ[\\s-]?bewerbung', 'spontan[\\s-]?bewerbung', 'blindbewerbung',
@@ -41,12 +53,13 @@ export function formatHints(tokens) {
   return [...first, ...rest].join(';');
 }
 
-/** 0 to 2: one point for an open-applications invitation, one for any Java or Rust trace. */
+/** -2 to 4: see the header. */
 export function hintScore(row) {
   const tokens = parseHints(row?.hints);
-  const open = tokens.includes(OPEN_APPS_HINT) ? 1 : 0;
+  const has = (t) => tokens.includes(t);
   const stack = tokens.some((t) => STACK_HINTS.includes(t)) ? 1 : 0;
-  return open + stack;
+  return (has(OPEN_APPS_HINT) ? 1 : 0) + stack + (has(SOFTWARE_HINT) ? 1 : 0) + (has(CAREERS_HINT) ? 1 : 0)
+    - (has(NO_SITE_HINT) ? 1 : 0) - (has(PLACEMENT_HINT) ? 2 : 0);
 }
 
 /**
@@ -76,6 +89,36 @@ export function pageHints(text) {
   if (RUST.test(t)) out.push('site:rust');
   if (OPEN_APPS.test(t)) out.push(OPEN_APPS_HINT);
   return out;
+}
+
+// Strong phrases only: a bare "software" appears on every IT-adjacent page.
+const SOFTWARE = new RegExp([
+  'software[-\\s]?(?:entwicklung|development|engineering|l[oö]sungen?|solutions?|plattform|platform|produkt|product)',
+  '(?:app|web|backend|individual)[-\\s]?(?:software[-\\s]?)?entwicklung',
+  'entwicklung\\s+(?:von|individueller|massgeschneiderter)\\s+software',
+  '(?:build|develop|ship)(?:s|ing)?\\s+(?:custom\\s+|our\\s+own\\s+)?software',
+  'custom\\s+software', 'individualsoftware', 'saas', 'logiciels?\\s+(?:de|sur\\s+mesure)', '[ée]diteur\\s+de\\s+logiciels?',
+].join('|'), 'iu');
+// Service phrases for staffing and body leasing, not a bare "recruit": a firm hiring its own engineers is no placement firm.
+const PLACEMENT = new RegExp([
+  'personalverleih', 'personalvermittlung', 'arbeitnehmer[üu]berlassung', 'tempor[äa]rstellen', 'temporary\\s+staffing',
+  'staffing\\s+services', 'body[-\\s]?leasing', 'travail\\s+temporaire', 'placement\\s+de\\s+personnel', "agence\\s+d['’]int[ée]rim",
+  'recruitment\\s+services',
+].join('|'), 'iu');
+
+/** Site probe tokens from the visible text of a home or second page: software, placement. */
+export function siteProfileHints(text) {
+  const t = String(text ?? '');
+  const out = [];
+  if (SOFTWARE.test(t)) out.push(SOFTWARE_HINT);
+  if (PLACEMENT.test(t.replace(/software\s+f[üu]r\s+personalvermittler\w*/giu, ' '))) out.push(PLACEMENT_HINT);
+  return out;
+}
+
+/** The domain after `web:` in a hints cell, or null. */
+export function webDomain(cell) {
+  const token = parseHints(cell).find((t) => t.startsWith('web:'));
+  return token ? token.slice('web:'.length) || null : null;
 }
 
 export function stripTags(html) {
