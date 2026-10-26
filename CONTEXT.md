@@ -54,6 +54,10 @@ _Avoid_: score (reserved for evaluated postings), priority, grade
 The census tool and registry that enumerates Prospects from registers, job-board employer mining, startup directories and GitHub orgs. It names companies and does nothing else with them.
 _Avoid_: discover (the ATS board resolver `discover-ats.mjs`, which consumes names the Radar produces)
 
+**Site probe**:
+The zero-model read of a Prospect's own website by `radar-enrich.mjs --sites`, for a Prospect that no register, GitHub organisation or `portals.yml` entry gives a website: up to 6 guessed domains from the registered name are tried, one counts only when its page names the company (and its place), and the first verified site is read for hint tokens. The result is stored in the `hints` cell as `web:{domain}`, or `site:none` when no domain verified. It reads company pages only, never people, and never evaluates, approaches or excludes the Prospect.
+_Avoid_: crawl, scrape, enrichment as a name for the whole Radar (the word is reserved for hints), lookup (a register query)
+
 **Spontaneous application**:
 A Direct application sent to a Prospect with no Lead behind it: no posting exists, so the CV is framed from the profile's no-JD row (`modes/_profile.md`, "Your Adaptive Framing") instead of being tailored to a JD.
 _Avoid_: cold application (collides with cold outreach in `contacto`), unsolicited, speculative; keep "candidature spontanée" and "Initiativbewerbung" as market vocabulary only
@@ -99,6 +103,7 @@ _Avoid_: follow-up (reserved for applications in `data/follow-ups.md`)
 - A **Body-shop** is never a **Cabinet**: it fails vetting on the contract-signer test and becomes a `data/blacklist.md` suggestion
 - The **Radar** produces **Prospects**; a **Prospect** may later resolve to a `portals.yml` board, at which point the scanner starts producing **Leads** for it
 - A **Prospect** is one brand or group with its in-zone sites listed; legal entities are aliases, never separate Prospects
+- A **Site probe** only reorders Prospects inside one zone and country group through the `hints` cell: a verified site with software, careers or stack traces ranks above an unprobed Prospect, and a probed Prospect with no verified site ranks below it; it never changes a **Tier**
 - A **Spontaneous application** targets a **Prospect** directly; it has no **Lead**, its **Via** is `—` (Direct), and it enters the tracker only once it is actually sent
 - A **Spontaneous application** starts from a **Prospect** of **Tier** 1 or 2, one per daily run, chosen by the candidate from the best untouched ones
 - A **Candiboost send** is a **Spontaneous application** whose first mail was not written here: it has a tracker row and a contact from the day it is synced, and its company is excluded from the daily pick of first mails; its personalised mail is a follow-up, chosen 1-2 per day from the sends 7 days old or older, **Tier** 1 first
