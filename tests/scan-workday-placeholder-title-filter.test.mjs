@@ -99,3 +99,11 @@ test('a company whose filter_on leaves out the title still resolves every placeh
   assert.equal(details.length, 3, out);
   assert.match(out, /resolved 3 of 3 multi-location placeholder\(s\)/);
 });
+
+test('a placeholder another eligible track admits still gets its detail request', () => {
+  const { out, details } = runScan(`title_filter:\n  positive:\n    - "Engineer"\ntracks:\n  a:\n    scope: all\n    title_filter:\n      positive:\n        - "Engineer"\n  b:\n    scope: all\n    title_filter:\n      positive:\n        - "Accountant"\n${company}`);
+  assert.deepEqual(details, [
+    `GET ${CXS}/job/USA---Austin-TX/Platform-Engineer_R1`,
+    `GET ${CXS}/job/USA---Austin-TX/Staff-Accountant_R2`,
+  ], out);
+});
