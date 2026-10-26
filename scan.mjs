@@ -4575,8 +4575,13 @@ async function main() {
       // This scan's own title decision, for a provider that pays extra per
       // posting (Workday's multi-location detail GETs) and can skip postings
       // the title filter below will drop. Absent when this company's filter_on
-      // leaves the title out, since then no title is dropped.
-      ...(normalizeFilterOn(company.filter_on).includes('title') ? { titleWanted: (title) => titleFilter(title) } : {}),
+      // leaves the title out, since then no title is dropped. A title is
+      // wanted when ANY eligible track admits it: track a through its own
+      // filter_on-aware chain, the other tracks through their own title filter.
+      ...(normalizeFilterOn(company.filter_on).includes('title') ? {
+        titleWanted: (title) => tracks.some(track => isEligible(track, company)
+          && (track.id === 'a' ? titleFilter(title) : track.titleFilter(title))),
+      } : {}),
     };
     let sourceName = provider.id === 'local-parser' ? 'local-parser' : `${provider.id}-api`;
     try {
