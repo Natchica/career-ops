@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enrichRow, githubLogin, mergeHints, registerOnly, selectForEnrichment, siteDomains, siteProbeRow } from '../radar/enrich.mjs';
+import { probeRows } from '../radar-enrich.mjs';
+import { RADAR_COLUMNS, serializeRegistry } from '../radar/registry.mjs';
 import { SITE_USER_AGENT } from '../radar/site.mjs';
 import { loadZoneTable } from '../radar/zones.mjs';
 
@@ -283,5 +287,60 @@ test('siteProbeRow: a name with nothing to guess is site:none without a request'
     const out = await siteProbeRow(row('x', { name }), ctx);
     assert.deepEqual({ tokens: out.tokens, answered: out.answered }, { tokens: ['site:none'], answered: true });
     assert.equal(requests.length, 0);
+  }
+});
+
+// --- radar-enrich.mjs: the batch loop and the --sites flag ---
+
+test('probeRows persists every 8 rows, merges the checked date, and leaves an unanswered row to a later run', async () => {
+  const rows = Array.from({ length: 17 }, (_, i) => row(`p${i}`));
+  const batches = [];
+  const done = await probeRows(rows, {
+    probe: async () => ({ tokens: ['site:none'], answered: true, notes: [] }),
+    ctx: {},
+    today: '2026-10-26',
+    persist: async (batch) => { batches.push(batch.length); },
+  });
+  assert.deepEqual(batches, [8, 8, 1]);
+  assert.equal(done.length, 17);
+  assert.ok(done.every((r) => r.hints === 'checked:2026-10-26;site:none'));
+
+  const offline = await probeRows([row('off')], {
+    probe: async () => ({ tokens: [], answered: false, notes: ['x'] }),
+    ctx: {},
+    today: '2026-10-26',
+    persist: async () => {},
+  });
+  assert.equal(offline[0].hints, '');
+  assert.equal(selectForEnrichment([row('off', { hints: offline[0].hints })], rules, { zones: ['B'], sites: true }).length, 1);
+});
+
+test('radar-enrich --sites reads the registry only: zones default to B, a dry run never writes, bad zones fail', () => {
+  const root = mkdtempSync(join(tmpdir(), 'radar-enrich-cli-'));
+  try {
+    mkdirSync(join(root, 'data'), { recursive: true });
+    const full = (r) => Object.fromEntries(RADAR_COLUMNS.map((c) => [c, r[c] ?? '']));
+    const checked = { hints: 'checked:2026-10-20' };
+    const rows = [
+      row('b-register', checked), row('b-github', { ...checked, aliases: '#github:x' }), row('a-register', { ...checked, sites: 'Basel:A' }),
+    ].map(full);
+    const file = join(root, 'data', 'radar.tsv');
+    writeFileSync(file, serializeRegistry({ columns: [...RADAR_COLUMNS], rows }));
+    const before = createHash('sha256').update(readFileSync(file)).digest('hex');
+    const run = (args) => spawnSync(process.execPath, [join(ROOT, 'radar-enrich.mjs'), ...args], {
+      cwd: root, encoding: 'utf-8', timeout: 60_000,
+      env: { ...process.env, CAREER_OPS_ROOT: root, CAREER_OPS_DATA_DIR: '', CAREER_OPS_PORTALS: '', GITHUB_PERSONAL_ACCESS_TOKEN: '' },
+    });
+    const sites = run(['--sites', '--dry-run']);
+    assert.equal(sites.status, 0, sites.stderr);
+    const out = JSON.parse(sites.stdout);
+    assert.deepEqual({ mode: out.mode, zones: out.zones, selected: out.selected, probed: out.probed }, { mode: 'sites', zones: ['B'], selected: 0, probed: 0 });
+    const hints = JSON.parse(run(['--dry-run']).stdout);
+    assert.deepEqual({ mode: hints.mode, zones: hints.zones }, { mode: 'hints', zones: ['A', 'B'] });
+    assert.equal(run(['--sites', '--zones', 'Z']).status, 1);
+    assert.match(run(['--help']).stdout, /--sites/);
+    assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'), before);
+  } finally {
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
