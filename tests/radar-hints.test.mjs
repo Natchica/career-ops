@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  careersLinkFrom, formatHints, hintScore, pageHints, parseHints, repoHints, robotsAllows, stripTags,
+  careersLinkFrom, formatHints, hintScore, pageHints, parseHints, repoHints, robotsAllows, siteProfileHints, stripTags, webDomain,
 } from '../radar/hints.mjs';
 import { compareProspects } from '../radar/tiers.mjs';
 
@@ -101,4 +101,67 @@ test('careersLinkFrom: "Schnittstellen" and "Stellen" inside another word are no
 test('careersLinkFrom: a blog post whose slug ends in "-job" is not a careers link', () => {
   const html = '<a href="/blog/interview-mit-oeko-job">Blog</a><a href="/jobs/">Jobs</a>';
   assert.equal(careersLinkFrom(html, 'https://acme.ch/'), 'https://acme.ch/jobs/');
+});
+
+test('hintScore: software and careers add 1, site:none subtracts 1, site:placement subtracts 2, web: alone adds 0', () => {
+  assert.equal(hintScore({ hints: 'site:software' }), 1);
+  assert.equal(hintScore({ hints: 'site:careers' }), 1);
+  assert.equal(hintScore({ hints: 'site:none;checked:2026-10-26' }), -1);
+  assert.equal(hintScore({ hints: 'web:a.ch;site:placement' }), -2);
+  assert.equal(hintScore({ hints: 'web:a.ch' }), 0);
+  assert.equal(hintScore({ hints: 'web:a.ch;site:software;site:careers;site:open-apps;gh:java' }), 4);
+});
+
+test('compareProspects: a confirmed good site ranks before unprobed, which ranks before no site, before placement', () => {
+  const rows = [
+    row('a-placement', { hints: 'web:a.ch;site:placement;checked:2026-10-26' }),
+    row('b-none', { hints: 'site:none;checked:2026-10-26' }),
+    row('c-plain'),
+    row('d-good', { hints: 'web:d.ch;site:software;checked:2026-10-26' }),
+  ];
+  const keys = rows.sort((a, b) => compareProspects(a, b, rules)).map((p) => p.key);
+  assert.deepEqual(keys, ['d-good', 'c-plain', 'b-none', 'a-placement']);
+});
+
+test('siteProfileHints: a strong software phrase gives site:software, a bare word does not', () => {
+  for (const text of [
+    'Individuelle Softwareentwicklung für KMU',
+    'We build custom software for banks',
+    'Éditeur de logiciels de gestion',
+    'SaaS platform for logistics',
+    'Software-Entwicklung und Beratung',
+  ]) assert.ok(siteProfileHints(text).includes('site:software'), text);
+  for (const text of ['Software', 'Our team uses software tools daily', 'Treuhand und Buchhaltung']) {
+    assert.ok(!siteProfileHints(text).includes('site:software'), text);
+  }
+  assert.deepEqual(pageHints('Individuelle Softwareentwicklung für KMU'), []);
+});
+
+test('siteProfileHints: staffing and placement wording gives site:placement, recruiting your own engineers does not', () => {
+  for (const text of [
+    'Personalverleih und Personalvermittlung',
+    'Temporary staffing and recruitment services',
+    'Travail temporaire et placement de personnel',
+    'IT body leasing for banks',
+    'Arbeitnehmerüberlassung',
+  ]) assert.ok(siteProfileHints(text).includes('site:placement'), text);
+  for (const text of [
+    'Unser Recruiting-Prozess in drei Schritten',
+    'We are recruiting Java engineers',
+    'Software für Personalvermittler',
+    'Offene Stellen',
+  ]) assert.ok(!siteProfileHints(text).includes('site:placement'), text);
+});
+
+test('webDomain: reads the domain after web:, or null', () => {
+  assert.equal(webDomain('gh:java;web:acme.ch;checked:2026-10-26'), 'acme.ch');
+  assert.equal(webDomain('site:none'), null);
+  assert.equal(webDomain(''), null);
+});
+
+test('formatHints: stack, open applications, then the rest sorted, with the Site probe tokens', () => {
+  assert.equal(
+    formatHints(['web:acme.ch', 'site:software', 'checked:2026-10-26', 'site:careers', 'site:open-apps', 'gh:java']),
+    'gh:java;site:open-apps;checked:2026-10-26;site:careers;site:software;web:acme.ch',
+  );
 });
