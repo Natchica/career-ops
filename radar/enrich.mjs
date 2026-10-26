@@ -15,8 +15,11 @@
 
 import { compareProspects } from './tiers.mjs';
 import {
-  careersLinkFrom, formatHints, pageHints, parseHints, repoHints, robotsAllows, stripTags,
+  CAREERS_HINT, NO_SITE_HINT, careersLinkFrom, formatHints, pageHints, parseHints, repoHints, robotsAllows, siteProfileHints, stripTags,
 } from './hints.mjs';
+import { GROUP_TAILS, needleFor, needleVariants } from './resolve.mjs';
+import { fetchSitePage, guessDomains, nameMatches, pageLines, readSite } from './site.mjs';
+import { foldName } from './zones.mjs';
 
 const API = 'https://api.github.com';
 const UA = 'career-ops-radar (personal job-search census, reads company careers pages only)';
@@ -31,19 +34,61 @@ export function githubLogin(row) {
   return alias ? alias.slice('#github:'.length) : null;
 }
 
+/** A Prospect known only from a register: no GitHub organisation, no `portals.yml` entry. */
+export function registerOnly(row) {
+  const ref = String(row.portals_ref ?? '').trim();
+  return !githubLogin(row) && (ref === '' || ref === '—' || ref === '-');
+}
+
+const SITE_TAILS = ['it security', 'software', 'solutions'];
+const TAILS = new Set([...SITE_TAILS, ...GROUP_TAILS]);
+const MAX_GUESSES = 6;
+
+/** The base name with trailing generic words dropped one step at a time: "acme software solutions" gives "acme software", "acme". */
+function trimmedBases(base) {
+  const out = [];
+  let tokens = base.split(' ');
+  while (tokens.length > 1) {
+    if (tokens.length > 2 && TAILS.has(tokens.slice(-2).join(' '))) tokens = tokens.slice(0, -2);
+    else if (TAILS.has(tokens.at(-1))) tokens = tokens.slice(0, -1);
+    else break;
+    out.push(tokens.join(' '));
+  }
+  return out;
+}
+
+/**
+ * Domains a register-only firm might own, at most 6: the joined spellings of the
+ * name and its trimmed forms (longest first), then the hyphenated ones. A name
+ * too long or too generic to guess gives none.
+ */
+export function siteDomains(name) {
+  const primary = needleFor(name);
+  if (!primary) return [];
+  const bases = new Set([primary.base, ...needleVariants(name).map((n) => n.base)]);
+  for (const b of [...bases]) for (const t of trimmedBases(b)) bases.add(t);
+  const joined = [];
+  const hyphenated = [];
+  for (const base of [...bases].sort((a, b) => b.length - a.length)) {
+    for (const d of guessDomains({ server: base, base })) (d.split('.')[0].includes('-') ? hyphenated : joined).push(d);
+  }
+  return [...new Set([...joined, ...hyphenated])].slice(0, MAX_GUESSES);
+}
+
 /**
  * The Prospects worth probing: tier 1, untouched, with a place to look (a GitHub
  * organisation or a `portals.yml` entry), in picker order, at most `limit`.
  * A Prospect already probed (`checked:` token) is skipped unless `refresh`.
  */
-export function selectForEnrichment(rows, rules, { zones = ['A', 'B'], limit = 40, keys = null, refresh = false, hasSource } = {}) {
+export function selectForEnrichment(rows, rules, { zones = ['A', 'B'], limit = 40, keys = null, refresh = false, hasSource, sites = false } = {}) {
   const wanted = new Set(zones);
   const inZone = (p) => splitCell(p.sites).some((site) => wanted.has(site.split(':').pop()?.trim()));
   const picked = rows.filter((p) => {
     if (keys) return keys.includes(p.key);
     if (p.tier !== '1' || p.spontaneous) return false;
     if (!inZone(p)) return false;
-    if (!githubLogin(p) && !(hasSource && hasSource(p))) return false;
+    // Site probe: the opposite pool, the register-only Prospects that nothing else gives a website.
+    if (sites ? !registerOnly(p) || (hasSource && hasSource(p)) : !githubLogin(p) && !(hasSource && hasSource(p))) return false;
     return refresh || !parseHints(p.hints).some((t) => t.startsWith('checked:'));
   });
   picked.sort((a, b) => compareProspects(a, b, rules));
@@ -152,9 +197,68 @@ export async function enrichRow(row, ctx) {
   return { tokens: [...tokens], answered, notes };
 }
 
+/**
+ * A guessed domain is this Prospect's own site when the legal name or the title
+ * on it carries the registered name, or when the page text carries the full name
+ * as whole words together with one of the Prospect's registered places. A
+ * namesake that shares only a part of the name never verifies.
+ */
+function verifiesSite(read, needle, places) {
+  if (read.pages === 0) return false;
+  if (nameMatches(read.legalName, [needle]) || nameMatches(read.title, [needle])) return true;
+  const text = ` ${foldName(read.texts.map((t) => pageLines(t.html).join(' ')).join(' '))} `;
+  return text.includes(` ${needle.base} `) && places.some((place) => text.includes(` ${place} `));
+}
+
+/**
+ * Probe one register-only Prospect's own website (the Site probe). Guessed
+ * domains are read in order with `readSite` (robots.txt, 1 s pace, at most 2
+ * pages); the first verified one is kept as `web:{domain}` with the hint tokens
+ * from its pages, and its careers page is read as the second page when the
+ * Impressum was not needed. No verified domain gives `site:none`. A domain that
+ * does not exist counts as an answer; a network outage does not, so nothing is
+ * marked as checked while offline. Never throws.
+ *
+ * @param {object} row  A registry row.
+ * @param {{http: {fetchText: Function}, sleep: Function, table: object}} ctx
+ * @returns {Promise<{tokens: string[], answered: boolean, notes: string[]}>}
+ */
+export async function siteProbeRow(row, ctx) {
+  const needle = needleFor(row.name);
+  const domains = siteDomains(row.name);
+  const notes = [];
+  if (!needle || domains.length === 0) return { tokens: [NO_SITE_HINT], answered: true, notes };
+  const places = splitCell(row.sites).map((s) => foldName(s.slice(0, s.lastIndexOf(':')))).filter(Boolean);
+
+  let reached = false;
+  for (const domain of domains) {
+    const read = await readSite(domain, ctx, { keepText: true });
+    if (typeof read.robots === 'string' || read.nxdomain) reached = true;
+    if (!verifiesSite(read, needle, places)) {
+      notes.push(`${domain}: ${read.note || 'name does not match'}`);
+      continue;
+    }
+    const tokens = new Set([`web:${domain}`]);
+    const texts = read.texts.map((t) => stripTags(t.html));
+    const home = read.texts[0];
+    const link = careersLinkFrom(home.html, home.url);
+    if (link) tokens.add(CAREERS_HINT);
+    if (link && link !== home.url && read.pages < 2 && robotsAllows(read.robots, new URL(link).pathname)) {
+      try {
+        texts.push(stripTags((await fetchSitePage(link, domain, ctx)).text));
+      } catch (e) {
+        notes.push(`careers ${link}: ${e?.message ?? e}`);
+      }
+    }
+    for (const text of texts) for (const t of [...pageHints(text), ...siteProfileHints(text)]) tokens.add(t);
+    return { tokens: [...tokens], answered: true, notes };
+  }
+  return reached ? { tokens: [NO_SITE_HINT], answered: true, notes } : { tokens: [], answered: false, notes };
+}
+
 /** The new `hints` cell: the old cell's tokens kept except stale `checked:` and probe tokens, plus the fresh ones. */
 export function mergeHints(oldCell, fresh, today, { checked }) {
-  const kept = parseHints(oldCell).filter((t) => !t.startsWith('checked:') && !/^(gh|site):/.test(t));
+  const kept = parseHints(oldCell).filter((t) => !t.startsWith('checked:') && !/^(gh|site|web):/.test(t));
   const all = [...kept, ...fresh];
   if (checked) all.push(`checked:${today}`);
   return formatHints(all);
