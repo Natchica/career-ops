@@ -231,9 +231,11 @@ export async function siteProbeRow(row, ctx) {
   const places = splitCell(row.sites).map((s) => foldName(s.slice(0, s.lastIndexOf(':')))).filter(Boolean);
 
   let reached = false;
+  let forbidden = false;
   for (const domain of domains) {
     const read = await readSite(domain, ctx, { keepText: true });
     if (typeof read.robots === 'string' || read.nxdomain) reached = true;
+    if (read.note.startsWith('robots.txt disallows')) forbidden = true;
     if (!verifiesSite(read, needle, places)) {
       notes.push(`${domain}: ${read.note || 'name does not match'}`);
       continue;
@@ -253,6 +255,8 @@ export async function siteProbeRow(row, ctx) {
     for (const text of texts) for (const t of [...pageHints(text), ...siteProfileHints(text)]) tokens.add(t);
     return { tokens: [...tokens], answered: true, notes };
   }
+  // A guess whose robots.txt forbids reading is a real site we may not read: neutral, never "no site found".
+  if (forbidden) return { tokens: [], answered: true, notes };
   return reached ? { tokens: [NO_SITE_HINT], answered: true, notes } : { tokens: [], answered: false, notes };
 }
 
