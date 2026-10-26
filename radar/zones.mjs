@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import * as yaml from 'js-yaml';
+import { loadYaml } from '../lib/yaml-document.mjs';
 
 export class RadarConfigError extends Error {
   constructor(message) {
@@ -95,7 +95,7 @@ export function loadZoneTable({ dataRoot, codeRoot }) {
   }
   let doc;
   try {
-    doc = yaml.load(text);
+    doc = loadYaml(text);
   } catch (e) {
     throw new RadarConfigError(`${source}: ${e.message}`);
   }
