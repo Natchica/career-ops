@@ -344,3 +344,11 @@ test('radar-enrich --sites reads the registry only: zones default to B, a dry ru
     rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
+
+test('siteProbeRow: a site that forbids reading is neither verified nor "no site found"', async () => {
+  const blocked = siteCtx({ 'koboldgames.ch': (path) => (path === '/robots.txt' ? 'User-agent: *\nDisallow: /' : httpError(404)) });
+  const out = await siteProbeRow(koboldRow(), blocked.ctx);
+  assert.deepEqual({ tokens: out.tokens, answered: out.answered }, { tokens: [], answered: true });
+  assert.ok(out.notes.some((n) => n.includes('robots.txt disallows')));
+  assert.deepEqual(blocked.pathsOn('koboldgames.ch'), ['/robots.txt']);
+});
