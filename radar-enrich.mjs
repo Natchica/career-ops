@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { getCareerOpsRoot } from './path-resolver.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
@@ -58,7 +58,7 @@ function careersLookup(root) {
   const path = join(root, 'portals.yml');
   if (!existsSync(path)) return () => null;
   let doc;
-  try { doc = yaml.load(readFileSync(path, 'utf-8')); } catch { return () => null; }
+  try { doc = loadYaml(readFileSync(path, 'utf-8')); } catch { return () => null; }
   const byName = new Map();
   for (const c of doc?.tracked_companies ?? []) {
     if (c?.name && c.careers_url && c.enabled !== false) byName.set(String(c.name).toLowerCase(), c.careers_url);
