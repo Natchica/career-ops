@@ -232,3 +232,63 @@ test('a pick without sources prints no sources suffix', () => {
   assert.deepEqual(JSON.parse(pick(root, ['next']).stdout).picks[0].sources, []);
   assert.doesNotMatch(pick(root, ['next', '--summary']).stdout, /sources:/);
 });
+
+// --- Site probe: the domain on each pick and the unprobed warning ---
+
+const swiss = (over) => prospect({ sites: 'Basel:B', country: 'CH', sources: 'zefix;zefix:software', ...over });
+const PROBED = 'checked:2026-10-26';
+
+test('each pick carries its verified website and its hint tokens', () => {
+  const root = sandbox({
+    rows: [
+      swiss({ key: 'w1', name: 'Web One', hints: `web:webone.fr;site:software;${PROBED}` }),
+      swiss({ key: 'n1', name: 'No Site', hints: `site:none;${PROBED}` }),
+    ],
+  });
+  const picks = JSON.parse(pick(root, ['next', '--count', '10']).stdout).picks;
+  const w1 = picks.find((p) => p.key === 'w1');
+  assert.equal(w1.web, 'webone.fr');
+  assert.deepEqual(w1.hints, ['web:webone.fr', 'site:software', PROBED]);
+  assert.equal(picks.find((p) => p.key === 'n1').web, null);
+});
+
+test('--summary shows the website or "no site found" before the sources, which stay last', () => {
+  const root = sandbox({
+    rows: [
+      swiss({ key: 'w1', name: 'Web One', sources: 'zefix', hints: `web:webone.fr;${PROBED}` }),
+      swiss({ key: 'n1', name: 'No Site', hints: `site:none;${PROBED}` }),
+    ],
+  });
+  const out = pick(root, ['next', '--summary', '--count', '10']).stdout;
+  assert.match(out, /Web One \(w1\).*· web: webone\.fr/);
+  assert.match(out, /No Site \(n1\).*· no site found/);
+  assert.match(out, /· web: webone\.fr · sources: zefix$/m);
+});
+
+test('inside a zone a confirmed good site ranks before an unprobed Prospect, which ranks before one with no site', () => {
+  const root = sandbox({
+    rows: [
+      swiss({ key: 'a-none', name: 'A None', hints: `site:none;${PROBED}` }),
+      swiss({ key: 'b-plain', name: 'B Plain' }),
+      swiss({ key: 'c-good', name: 'C Good', hints: `web:cgood.fr;site:careers;${PROBED}` }),
+    ],
+  });
+  assert.deepEqual(keys(pick(root, ['next', '--count', '10'])), ['c-good', 'b-plain', 'a-none']);
+});
+
+test('unprobed counts the register-only Prospects among the first 30 without a probe, and a long run suggests the probe', () => {
+  const plain = (n, over = () => ({})) => Array.from({ length: n }, (_, i) => swiss({ key: `p${String(i).padStart(2, '0')}`, name: `P${i}`, ...over(i) }));
+  const run = (rows) => {
+    const root = sandbox({ rows });
+    return { json: JSON.parse(pick(root, ['next']).stdout), text: pick(root, ['next', '--summary']).stdout };
+  };
+  const sixteen = run(plain(16));
+  assert.equal(sixteen.json.unprobed, 16);
+  assert.match(sixteen.text, /16 of the next 16 Prospects have no Site probe: run node radar-enrich\.mjs --sites --limit 40 --summary/);
+  const fifteen = run(plain(16, (i) => (i === 0 ? { hints: PROBED } : {})));
+  assert.equal(fifteen.json.unprobed, 15);
+  assert.doesNotMatch(fifteen.text, /Site probe/);
+  assert.equal(run(plain(40)).json.unprobed, 30);
+  const github = run(plain(16, (i) => (i === 0 ? { aliases: '#github:x' } : {})));
+  assert.equal(github.json.unprobed, 15);
+});
