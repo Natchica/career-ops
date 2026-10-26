@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { enrichRow, githubLogin, mergeHints, selectForEnrichment } from '../radar/enrich.mjs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { enrichRow, githubLogin, mergeHints, registerOnly, selectForEnrichment, siteDomains, siteProbeRow } from '../radar/enrich.mjs';
+import { SITE_USER_AGENT } from '../radar/site.mjs';
+import { loadZoneTable } from '../radar/zones.mjs';
 
 const rules = { poolZones: ['A', 'B', 'C', 'D'], order: { zones: ['A', 'B', 'C', 'D'], countries: [['CH'], ['FR', 'DE']], sizeBands: ['?'] } };
 const row = (key, extra = {}) => ({
@@ -120,4 +126,162 @@ test('enrichRow falls back to the www spelling when the apex host does not conne
   const out = await enrichRow(row('acme'), { http, sleep, careersUrlFor: () => 'https://acme.ch/' });
   assert.deepEqual(out.tokens.sort(), ['site:java', 'site:open-apps']);
   assert.ok(calls.some((u) => u.startsWith('https://www.acme.ch')));
+});
+
+test('selectForEnrichment with sites keeps register-only tier 1 Prospects in zone, untouched, not yet probed', () => {
+  const rows = [
+    row('reg'),
+    row('dash', { portals_ref: '—' }),
+    row('gh', { aliases: '#github:gh' }),
+    row('portal', { portals_ref: 'Portal' }),
+    row('src'),
+    row('checked', { hints: 'checked:2026-10-20' }),
+    row('zc', { sites: 'Zurich:C' }),
+    row('t2', { tier: '2' }),
+    row('marked', { spontaneous: 'skipped:2026-10-21' }),
+  ];
+  const hasSource = (p) => p.key === 'src';
+  const opts = { zones: ['B'], sites: true, hasSource };
+  assert.deepEqual(selectForEnrichment(rows, rules, opts).map((p) => p.key).sort(), ['dash', 'reg']);
+  assert.ok(selectForEnrichment(rows, rules, { ...opts, refresh: true }).some((p) => p.key === 'checked'));
+  assert.equal(selectForEnrichment(rows, rules, { ...opts, limit: 1 }).length, 1);
+  assert.deepEqual(selectForEnrichment(rows, rules, { ...opts, keys: ['gh'] }).map((p) => p.key), ['gh']);
+  assert.equal(registerOnly(row('x', { aliases: '#github:x' })), false);
+  assert.equal(registerOnly(row('y', { portals_ref: '—' })), true);
+});
+
+test('siteDomains guesses joined spellings first, then hyphenated, trimmed names included, at most 6', () => {
+  assert.deepEqual(siteDomains('Kobold Software AG'), [
+    'koboldsoftware.ch', 'koboldsoftware.com', 'kobold.ch', 'kobold.com', 'kobold-software.ch', 'kobold-software.com',
+  ]);
+  assert.deepEqual(siteDomains('Acme Software Solutions GmbH'), [
+    'acmesoftwaresolutions.ch', 'acmesoftwaresolutions.com', 'acmesoftware.ch', 'acmesoftware.com', 'acme.ch', 'acme.com',
+  ]);
+  const security = siteDomains('Acme IT Security GmbH');
+  assert.ok(security.includes('acme.ch'));
+  assert.equal(security.length, 6);
+  assert.deepEqual(siteDomains('Kobold Games GmbH'), ['koboldgames.ch', 'koboldgames.com', 'kobold-games.ch', 'kobold-games.com']);
+  assert.ok(siteDomains('Acme Group AG').includes('acme.ch'));
+  assert.deepEqual(siteDomains('Data services'), []);
+  assert.deepEqual(siteDomains('One Two Three Four'), []);
+});
+
+test('mergeHints drops a stale web: token and keeps anything else', () => {
+  assert.equal(
+    mergeHints('web:old.ch;site:none;checked:2026-10-01;custom:x', ['web:new.ch'], '2026-10-26', { checked: true }),
+    'checked:2026-10-26;custom:x;web:new.ch',
+  );
+});
+
+// --- Site probe: a register-only Prospect's own website ---
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const table = loadZoneTable({ dataRoot: mkdtempSync(join(tmpdir(), 'radar-enrich-')), codeRoot: ROOT });
+const httpError = (status) => Object.assign(new Error(`HTTP ${status}`), { status });
+const dnsError = (code) => Object.assign(new TypeError('fetch failed'), { cause: { code } });
+const nx = () => dnsError('ENOTFOUND');
+const down = () => dnsError('EAI_AGAIN');
+
+/** A fake ctx: `hosts` maps a registrable host to a handler `(path) => html | Error`; any other host does not exist. */
+function siteCtx(hosts, { fallback = nx } = {}) {
+  const requests = [];
+  const sleeps = [];
+  const ctx = {
+    table,
+    sleep: async (ms) => { sleeps.push(ms); },
+    http: {
+      fetchText: async (url, opts) => {
+        requests.push({ url, opts });
+        const u = new URL(url);
+        const handler = hosts[u.hostname.replace(/^www\./, '')];
+        const r = handler ? handler(u.pathname) : fallback();
+        if (r instanceof Error) throw r;
+        return r;
+      },
+    },
+  };
+  const pathsOn = (host) => requests.filter((q) => new URL(q.url).hostname.replace(/^www\./, '') === host).map((q) => new URL(q.url).pathname);
+  return { ctx, requests, sleeps, pathsOn };
+}
+const page = (routes) => (path) => (path === '/robots.txt' ? (routes.robots ?? httpError(404)) : routes[path] ?? httpError(404));
+const koboldRow = (extra = {}) => row('kobold games', { name: 'Kobold Games GmbH', sites: 'Allschwil:B', ...extra });
+
+test('siteProbeRow verifies a guessed domain by its page title and stops at the first one', async () => {
+  const { ctx, requests } = siteCtx({ 'koboldgames.ch': page({ '/': '<title>Kobold Games | Home</title><p>Welcome</p>' }) });
+  const out = await siteProbeRow(koboldRow(), ctx);
+  assert.ok(out.tokens.includes('web:koboldgames.ch'));
+  assert.equal(out.answered, true);
+  assert.ok(!requests.some((q) => new URL(q.url).hostname.endsWith('koboldgames.com')));
+});
+
+test('siteProbeRow verifies by the full name plus the registered place in the page text, and needs both', async () => {
+  const home = '<title>Home</title><p>Kobold Games entwickelt Spiele in Allschwil.</p>';
+  const ok = await siteProbeRow(koboldRow(), siteCtx({ 'koboldgames.ch': page({ '/': home }) }).ctx);
+  assert.ok(ok.tokens.includes('web:koboldgames.ch'));
+  const elsewhere = await siteProbeRow(koboldRow({ sites: 'Liestal:B' }), siteCtx({ 'koboldgames.ch': page({ '/': home }) }).ctx);
+  assert.deepEqual(elsewhere.tokens, ['site:none']);
+});
+
+test('siteProbeRow tries a trimmed-name domain but never verifies a namesake', async () => {
+  const soft = koboldRow({ name: 'Kobold Software AG', key: 'kobold software' });
+  const namesake = siteCtx({ 'kobold.ch': page({ '/': '<title>Kobold</title><p>Kobold Spielwaren, Allschwil</p>' }) });
+  const out = await siteProbeRow(soft, namesake.ctx);
+  assert.deepEqual(out.tokens, ['site:none']);
+  assert.equal(out.answered, true);
+  assert.ok(namesake.pathsOn('kobold.ch').includes('/'));
+  const real = siteCtx({ 'kobold.ch': page({ '/': '<title>Home</title><p>Kobold Software AG, Allschwil</p>' }) });
+  assert.ok((await siteProbeRow(soft, real.ctx)).tokens.includes('web:kobold.ch'));
+});
+
+test('siteProbeRow: a domain that does not exist answers, an outage does not', async () => {
+  const gone = await siteProbeRow(koboldRow(), siteCtx({}).ctx);
+  assert.deepEqual({ tokens: gone.tokens, answered: gone.answered }, { tokens: ['site:none'], answered: true });
+  const outage = await siteProbeRow(koboldRow(), siteCtx({}, { fallback: down }).ctx);
+  assert.deepEqual(outage.tokens, []);
+  assert.equal(outage.answered, false);
+  assert.ok(outage.notes.length >= 1);
+});
+
+test('siteProbeRow reads at most 2 pages per domain, politely, and takes software, java and careers tokens from them', async () => {
+  const withImpressum = siteCtx({
+    'koboldgames.ch': page({
+      '/': '<title>Kobold Games</title><a href="/impressum">Impressum</a><a href="/karriere">Karriere</a><p>Individuelle Softwareentwicklung mit Java</p>',
+      '/impressum': '<p>Kobold Games GmbH</p><p>4123 Allschwil</p>',
+    }),
+  });
+  const full = await siteProbeRow(koboldRow(), withImpressum.ctx);
+  assert.deepEqual([...full.tokens].sort(), ['site:careers', 'site:java', 'site:software', 'web:koboldgames.ch']);
+  assert.deepEqual(withImpressum.pathsOn('koboldgames.ch'), ['/robots.txt', '/', '/impressum']);
+
+  const careers = siteCtx({
+    'koboldgames.ch': page({ '/': '<title>Kobold Games</title><a href="/karriere">Karriere</a>', '/karriere': '<p>Initiativbewerbung willkommen</p>' }),
+  });
+  const second = await siteProbeRow(koboldRow(), careers.ctx);
+  assert.ok(second.tokens.includes('site:open-apps') && second.tokens.includes('site:careers'));
+  assert.deepEqual(careers.pathsOn('koboldgames.ch'), ['/robots.txt', '/', '/karriere']);
+  assert.ok(careers.sleeps.length > 0 && careers.sleeps.every((ms) => ms === 1000));
+  for (const q of careers.requests) assert.equal(q.opts.headers['User-Agent'], SITE_USER_AGENT);
+
+  const blocked = siteCtx({
+    'koboldgames.ch': page({ robots: 'User-agent: *\nDisallow: /karriere', '/': '<title>Kobold Games</title><a href="/karriere">Karriere</a>' }),
+  });
+  const forbidden = await siteProbeRow(koboldRow(), blocked.ctx);
+  assert.ok(!blocked.pathsOn('koboldgames.ch').includes('/karriere'));
+  assert.ok(forbidden.tokens.includes('site:careers'));
+
+  const failing = siteCtx({
+    'koboldgames.ch': page({ '/': '<title>Kobold Games</title><a href="/karriere">Karriere</a>', '/karriere': httpError(500) }),
+  });
+  const survived = await siteProbeRow(koboldRow(), failing.ctx);
+  assert.ok(survived.tokens.includes('web:koboldgames.ch'));
+  assert.ok(survived.notes.some((n) => n.includes('karriere')));
+});
+
+test('siteProbeRow: a name with nothing to guess is site:none without a request', async () => {
+  for (const name of ['Data services', 'One Two Three Four']) {
+    const { ctx, requests } = siteCtx({});
+    const out = await siteProbeRow(row('x', { name }), ctx);
+    assert.deepEqual({ tokens: out.tokens, answered: out.answered }, { tokens: ['site:none'], answered: true });
+    assert.equal(requests.length, 0);
+  }
 });
