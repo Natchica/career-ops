@@ -16,7 +16,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as yaml from 'js-yaml';
+import { loadYaml } from './lib/yaml-document.mjs';
 import { isMainModule } from './lib/is-main-module.mjs';
 import { flagValue, validateFlags } from './lib/cli-flags.mjs';
 import { detectLang, isWord, normTerm, splitParagraphs, termRe } from './lib/letter-text.mjs';
@@ -173,7 +173,7 @@ function checkSet(value, allowed, where, field) {
  * @returns {{rules: object[], cannotCatch: object[]}}
  */
 export function loadUnslopRules(path = DEFAULT_RULES_PATH) {
-  const doc = yaml.load(readFileSync(path, 'utf-8')) || {};
+  const doc = loadYaml(readFileSync(path, 'utf-8')) || {};
   if (!Array.isArray(doc.rules) || doc.rules.length === 0) {
     throw new Error(`Slop rules file defines no rules: ${path}. An empty rule set checks nothing and would report a clean pass.`);
   }
