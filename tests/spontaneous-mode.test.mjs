@@ -69,3 +69,12 @@ test('the router and AGENTS.md route spontaneous', () => {
   assert.match(skill, /^\| `spontaneous` \| `spontaneous` \|$/m);
   assert.match(read('AGENTS.md'), /`spontaneous` — picks the best untouched tier 1 Prospect/);
 });
+
+test('step 3 opens the Site probe domain first and says what a missing site means', () => {
+  const step3 = mode.split('\n').find((l) => l.startsWith('3. **Research the company live.**')) ?? '';
+  assert.match(step3, /`web:`/);
+  assert.match(step3, /https:\/\/\{domain\}\//);
+  assert.match(step3, /counts as one of the 4/);
+  assert.match(step3, /`no site found`/);
+  assert.match(mode, /radar-enrich\.mjs --sites/);
+});
