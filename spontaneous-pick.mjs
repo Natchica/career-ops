@@ -30,6 +30,12 @@ import { RadarConfigError } from './radar/zones.mjs';
 import {
   classify, compareProspects, formatSpontaneous, loadTierRules, parseSpontaneous, prospectNames,
 } from './radar/tiers.mjs';
+import { registerOnly } from './radar/enrich.mjs';
+import { parseHints, webDomain } from './radar/hints.mjs';
+
+/** How many of the next Prospects count when looking for ones that no Site probe has read. */
+const PROBE_WINDOW = 30;
+const PROBE_WARN_ABOVE = 15;
 
 const CODE_ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -91,7 +97,8 @@ export function trackerCompanyMatches(row, company) {
 
 /**
  * @returns {{picks: object[], excluded: {marked: number, tracked: number, blacklisted: number},
- *            eligible: number, untiered: number, staleTiers: number}}
+ *            eligible: number, untiered: number, staleTiers: number, unprobed: number, probeWindow: number}}
+ *   `unprobed` counts the register-only Prospects among the first `probeWindow` eligible ones that no Site probe has read.
  */
 export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, candiboostRowFor = () => null, count = 3 }) {
   const excluded = { marked: 0, tracked: 0, blacklisted: 0 };
@@ -120,11 +127,15 @@ export function pickNext(rows, rules, { isTracked, isBlacklisted, contactsFor, c
     size_band: row.size_band || '?',
     sources: String(row.sources ?? '').split(';').map((s) => s.trim()).filter((t) => t && !t.includes(':')),
     portals_ref: row.portals_ref && row.portals_ref !== '—' ? row.portals_ref : null,
+    web: webDomain(row.hints),
+    hints: parseHints(row.hints),
     savedContacts: contactsFor(row),
     candiboostPending: candiboostRowFor(row) !== null,
     candiboostRow: candiboostRowFor(row),
   }));
-  return { picks, excluded, eligible: eligible.length, untiered, staleTiers };
+  const window = eligible.slice(0, PROBE_WINDOW);
+  const unprobed = window.filter((row) => registerOnly(row) && !parseHints(row.hints).some((t) => t.startsWith('checked:'))).length;
+  return { picks, excluded, eligible: eligible.length, untiered, staleTiers, unprobed, probeWindow: window.length };
 }
 
 const TRANSITIONS = {
@@ -171,11 +182,15 @@ function renderNext(out) {
   for (const p of out.picks) {
     const board = p.portals_ref ? ` · board: ${p.portals_ref}` : '';
     const contacts = p.savedContacts ? ` · ${p.savedContacts} saved contact(s)` : '';
-    lines.push(`  ${p.rank}. ${p.name} (${p.key}) — tier ${p.tier} · ${p.sites.join(', ')} · ${p.country} · ${p.signals} signal(s) · size ${p.size_band}${board}${contacts}${p.sources.length ? ` · sources: ${p.sources.join(', ')}` : ''}`);
+    const web = p.web ? ` · web: ${p.web}` : p.hints.includes('site:none') ? ' · no site found' : '';
+    lines.push(`  ${p.rank}. ${p.name} (${p.key}) — tier ${p.tier} · ${p.sites.join(', ')} · ${p.country} · ${p.signals} signal(s) · size ${p.size_band}${board}${web}${contacts}${p.sources.length ? ` · sources: ${p.sources.join(', ')}` : ''}`);
     lines.push(`     ${p.tier_reason}`);
     if (p.candiboostPending) lines.push(`     pending in Candiboost: delete row "${p.candiboostRow}" after sending`);
   }
   if (out.picks.length === 0) lines.push('  nothing eligible: run node radar-tiers.mjs --write, or loosen config/radar-tiers.yml');
+  if (out.unprobed > PROBE_WARN_ABOVE) {
+    lines.push(`  ${out.unprobed} of the next ${out.probeWindow} Prospects have no Site probe: run node radar-enrich.mjs --sites --limit 40 --summary`);
+  }
   if (out.untiered || out.staleTiers) {
     lines.push(`  ${out.untiered} untiered, ${out.staleTiers} stale: run node radar-tiers.mjs --write --summary`);
   }
